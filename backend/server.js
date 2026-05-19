@@ -8,8 +8,13 @@ require("dotenv").config();
 const app = express();
 const server = http.createServer(app);
 
+const PORT = process.env.PORT || 5000;
+
 const io = new Server(server, {
-    cors: { origin: "*" }
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
 });
 
 app.use(cors());
@@ -19,7 +24,7 @@ app.use(express.json());
 app.use("/api/auth", require("./routes/auth"));
 
 app.get("/", (req, res) => {
-    res.send("Chat Server is Running!");
+  res.send("Chat Server is Running!");
 });
 
 // Socket
@@ -27,10 +32,13 @@ require("./socket/chatSocket")(io);
 
 // MongoDB + Start Server
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => {
-        console.log("MongoDB Connected");
-        server.listen(process.env.PORT, () => {
-            console.log(`Server running on port ${process.env.PORT}`);
-        });
-    })
-    .catch(err => console.log("DB Error:", err));
+  .then(() => {
+    console.log("MongoDB Connected");
+
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("DB Error:", err);
+  });
