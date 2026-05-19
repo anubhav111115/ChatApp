@@ -687,12 +687,20 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
 {/* File attachment */}
 {msg.fileData && !msg.fileData.isImage && (
-  <FileCard
-    name={msg.fileData.name}
-    size={msg.fileData.size}
-    dataUrl={msg.fileData.data}
-    isDark={isDark}
-  />
+  <a
+    href={msg.fileData.data}
+    download={msg.fileData.name}
+    target="_blank"
+    rel="noreferrer"
+    style={{
+      color: "#8b5cf6",
+      textDecoration: "none",
+      display: "block",
+      marginTop: "8px"
+    }}
+  >
+    📄 {msg.fileData.name}
+  </a>
 )}
                       {/* Legacy image support */}
                       {msg.image && !msg.fileData && (
