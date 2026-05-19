@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import axios from "axios";
 import "./Chat.css";
 
-const socket = io("http://localhost:5000");
+const socket = io("https://chatapp-16sp.onrender.com");
 const COLORS = ["#6c63ff","#f78166","#3fb950","#d2a8ff","#ffa657","#79c0ff","#ff7b72","#43e8d8"];
 
 function getColor(name) {
@@ -193,7 +193,7 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
     if (newPass && newPass.length < 4) return showMsg("error", "New password must be at least 4 characters");
     setLoading(true);
     try {
-      await axios.post("http://localhost:5000/api/auth/update", {
+      await axios.post("https://chatapp-16sp.onrender.com/api/auth/update", {
         username: user.username,
         currentPassword: currentPass,
         newUsername: newUsername !== user.username ? newUsername : undefined,
