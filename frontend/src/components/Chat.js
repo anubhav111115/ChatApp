@@ -500,25 +500,34 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const sendMessage = () => {
     if (!text.trim() && !attachment) return;
+  
     const msgData = {
       sender: user.username,
       room: activeRoom,
       message: text.trim(),
     };
+  
+    // FIXED attachment sending
     if (attachment) {
       msgData.fileData = {
         name: attachment.name,
         size: attachment.size,
         type: attachment.type,
-        dataUrl: attachment.dataUrl,
+        data: attachment.dataUrl, // <-- changed from dataUrl to data
         isImage: attachment.isImage,
       };
     }
+  
     socket.emit("send_message", msgData);
+  
     setText("");
     setAttachment(null);
     setAttachPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  
     setShowEmojiPicker(false);
   };
 
@@ -667,18 +676,24 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                     {!mine && showName && <div className="bsender" style={{ color: getColor(msg.sender) }}>{msg.sender}</div>}
                     <div className={`bubble ${mine ? "mine" : "theirs"}`}>
                       {/* Image attachment */}
-                      {msg.fileData?.isImage && (
-                        <img
-                          src={msg.fileData.dataUrl}
-                          alt={msg.fileData.name}
-                          className="bubble-img clickable"
-                          onClick={() => setLightboxImg(msg.fileData.dataUrl)}
-                        />
-                      )}
-                      {/* File attachment */}
-                      {msg.fileData && !msg.fileData.isImage && (
-                        <FileCard name={msg.fileData.name} size={msg.fileData.size} dataUrl={msg.fileData.dataUrl} isDark={isDark} />
-                      )}
+{msg.fileData?.isImage && (
+  <img
+    src={msg.fileData.data}
+    alt={msg.fileData.name}
+    className="bubble-img clickable"
+    onClick={() => setLightboxImg(msg.fileData.data)}
+  />
+)}
+
+{/* File attachment */}
+{msg.fileData && !msg.fileData.isImage && (
+  <FileCard
+    name={msg.fileData.name}
+    size={msg.fileData.size}
+    dataUrl={msg.fileData.data}
+    isDark={isDark}
+  />
+)}
                       {/* Legacy image support */}
                       {msg.image && !msg.fileData && (
                         <img src={msg.image} alt="attachment" className="bubble-img clickable" onClick={() => setLightboxImg(msg.image)} />
