@@ -4,18 +4,18 @@ const messageSchema = new mongoose.Schema(
   {
     sender: {
       type: String,
-      required: true
+      required: true,
     },
 
     message: {
       type: String,
-      default: ""
+      default: "",
     },
 
     room: {
       type: String,
       required: true,
-      default: "general"
+      default: "general",
     },
 
     fileData: {
@@ -23,12 +23,10 @@ const messageSchema = new mongoose.Schema(
       size: Number,
       type: String,
       dataUrl: String,
-      isImage: Boolean
-    }
+      isImage: Boolean,
+    },
   },
-  {
-    timestamps: true
-  }
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("Message", messageSchema);

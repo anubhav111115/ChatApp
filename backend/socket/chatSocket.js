@@ -23,16 +23,19 @@ module.exports = (io) => {
 
     socket.on("send_message", async (data) => {
       try {
+        const { sender, message, room, fileData } = data;
+    
         const saved = await Message.create({
-          sender: data.sender,
-          message: data.message,
-          room: data.room,
-          fileData: data.fileData || null
+          sender,
+          message,
+          room,
+          fileData,
         });
     
-        io.to(data.room).emit("receive_message", saved);
+        io.to(room).emit("receive_message", saved);
+    
       } catch (err) {
-        console.error("Message Save Error:", err);
+        console.error("Send Message Error:", err);
       }
     });
 
