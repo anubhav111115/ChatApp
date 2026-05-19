@@ -36,7 +36,13 @@ function FileCard({ name, size, dataUrl, isDark }) {
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = name;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+  };
+  
+  const handleOpen = () => {
+    window.open(dataUrl, "_blank");
   };
 
   return (
@@ -48,7 +54,25 @@ function FileCard({ name, size, dataUrl, isDark }) {
         <div className="file-name">{name}</div>
         {size && <div className="file-size">{formatBytes(size)}</div>}
       </div>
-      <button className="file-dl-btn" onClick={handleDownload} style={{ color }}>
+      <div style={{ display: "flex", gap: "8px" }}>
+  <button
+    className="file-dl-btn"
+    onClick={handleOpen}
+    style={{ color }}
+    title="Open file"
+  >
+    👁️
+  </button>
+
+  <button
+    className="file-dl-btn"
+    onClick={handleDownload}
+    style={{ color }}
+    title="Download file"
+  >
+    ⬇️
+  </button>
+</div>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
@@ -407,7 +431,15 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socket.off("chat_history");
     socket.off("user_typing");
     socket.on("chat_history", (history) => {
-      setMessages(history.map(m => ({ ...m, time: getTime() })));
+      const formatted = history.map((m) => ({
+        ...m,
+        time: new Date(m.createdAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit"
+        })
+      }));
+    
+      setMessages(formatted);
     });
     socket.on("user_typing", ({ username }) => {
       if (username !== user.username) {
