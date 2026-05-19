@@ -21,9 +21,19 @@ module.exports = (io) => {
       socket.emit("chat_history", messages);
     });
 
-    socket.on("send_message", async ({ sender, message, room }) => {
-      const saved = await Message.create({ sender, message, room });
-      io.to(room).emit("receive_message", saved);
+    socket.on("send_message", async (data) => {
+      try {
+        const saved = await Message.create({
+          sender: data.sender,
+          message: data.message,
+          room: data.room,
+          fileData: data.fileData || null
+        });
+    
+        io.to(data.room).emit("receive_message", saved);
+      } catch (err) {
+        console.error("Message Save Error:", err);
+      }
     });
 
     // ✅ WebRTC call signaling - now userSockets is defined
