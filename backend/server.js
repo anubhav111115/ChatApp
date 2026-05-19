@@ -10,6 +10,7 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 5000;
 
+// Socket.io CORS
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -17,12 +18,19 @@ const io = new Server(server, {
   }
 });
 
-app.use(cors());
+// Express Middleware
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // Routes
 app.use("/api/auth", require("./routes/auth"));
 
+// Test Route
 app.get("/", (req, res) => {
   res.send("Chat Server is Running!");
 });

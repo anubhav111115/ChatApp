@@ -17,8 +17,8 @@ function Login({ onLogin }) {
     setLoading(true);
     setError("");
     const url = tab === "register"
-      ? "http://localhost:5000/api/auth/register"
-      : "http://localhost:5000/api/auth/login";
+      ? "https://chatapp-16sp.onrender.com/api/auth/register"
+      : "https://chatapp-16sp.onrender.com/api/auth/login";
     try {
       const res = await axios.post(url, { username, password });
       if (tab === "register") {
