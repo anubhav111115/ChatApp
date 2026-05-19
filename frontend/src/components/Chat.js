@@ -28,54 +28,58 @@ function formatBytes(bytes) {
 }
 
 function FileCard({ name, size, dataUrl, isDark }) {
-  const ext = name.split(".").pop().toUpperCase();
-  const extColors = { PDF: "#ef4444", DOC: "#3b82f6", DOCX: "#3b82f6", TXT: "#8888aa", XLS: "#22c55e", XLSX: "#22c55e" };
-  const color = extColors[ext] || "#6c63ff";
+  const color = isDark ? "#8b5cf6" : "#6d28d9";
 
   const handleDownload = () => {
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
-  
-  const handleOpen = () => {
-    window.open(dataUrl, "_blank");
+
+  const formatSize = (bytes) => {
+    if (!bytes) return "";
+    const kb = bytes / 1024;
+    return kb < 1024
+      ? `${kb.toFixed(1)} KB`
+      : `${(kb / 1024).toFixed(1)} MB`;
   };
 
   return (
-    <div className={`file-card ${isDark ? "dark" : "light"}`}>
-      <div className="file-icon" style={{ background: color + "22", color }}>
-        <span className="file-ext">{ext}</span>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px",
+        borderRadius: "12px",
+        background: "rgba(255,255,255,0.08)",
+        marginTop: "8px",
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: "600" }}>
+          📄 {name}
+        </div>
+        <div style={{ fontSize: "12px", opacity: 0.7 }}>
+          {formatSize(size)}
+        </div>
       </div>
-      <div className="file-info">
-        <div className="file-name">{name}</div>
-        {size && <div className="file-size">{formatBytes(size)}</div>}
-      </div>
-      <div style={{ display: "flex", gap: "8px" }}>
-  <button
-    className="file-dl-btn"
-    onClick={handleOpen}
-    style={{ color }}
-    title="Open file"
-  >
-    👁️
-  </button>
 
-  <button
-    className="file-dl-btn"
-    onClick={handleDownload}
-    style={{ color }}
-    title="Download file"
-  >
-    ⬇️
-  </button>
-</div>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
+      <button
+        onClick={handleDownload}
+        style={{
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          color,
+          fontSize: "20px",
+        }}
+        title="Download file"
+      >
+        ⬇️
       </button>
     </div>
   );
