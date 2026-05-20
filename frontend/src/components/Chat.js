@@ -136,8 +136,22 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   }, [call.stream]);
 
   useEffect(() => {
-    if (call.remoteStream && remoteVideoRef.current)
-      remoteVideoRef.current.srcObject = call.remoteStream;
+    if (
+      call.remoteStream &&
+      remoteVideoRef.current
+    ) {
+      remoteVideoRef.current.srcObject =
+        call.remoteStream;
+  
+      remoteVideoRef.current
+        .play()
+        .catch((err) =>
+          console.log(
+            "Remote play failed:",
+            err
+          )
+        );
+    }
   }, [call.remoteStream]);
 
   useEffect(() => {
@@ -175,7 +189,13 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
         {isVideo ? (
           <div className="call-video-wrap">
             {call.status === "active" && (
-              <video ref={remoteVideoRef} autoPlay playsInline className="call-remote-video" />
+              <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              muted={false}
+              className="call-remote-video"
+            />
             )}
             <video ref={localVideoRef} autoPlay playsInline muted className="call-local-video" />
           </div>
@@ -386,9 +406,42 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       }
     };
     pc.ontrack = (e) => {
-      console.log("Remote track received:", e.track.kind);
+      console.log("Remote stream received:", e.streams);
+    
       if (e.streams && e.streams[0]) {
-        setCall(prev => prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev);
+        const remoteStream = e.streams[0];
+    
+        setCall(prev =>
+          prev
+            ? {
+                ...prev,
+                remoteStream,
+                status: "active",
+              }
+            : prev
+        );
+    
+        // FORCE video refresh
+        setTimeout(() => {
+          const remoteVideo =
+            document.querySelector(
+              ".call-remote-video"
+            );
+    
+          if (remoteVideo) {
+            remoteVideo.srcObject =
+              remoteStream;
+    
+            remoteVideo
+              .play()
+              .catch((err) =>
+                console.log(
+                  "Remote video play error:",
+                  err
+                )
+              );
+          }
+        }, 100);
       }
     };
     pcRef.current = pc;
