@@ -28,6 +28,12 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+// ── FIX 1: moved outside Chat component to avoid stale closure ───────────────
+const getMediaConstraints = (type) => ({
+  audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
+  video: type === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
+});
+
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -123,6 +129,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
 
+  // ── FIX: assign stream to video element whenever stream changes ──────────────
   useEffect(() => {
     if (call.stream && localVideoRef.current)
       localVideoRef.current.srcObject = call.stream;
@@ -163,9 +170,13 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   return (
     <div className="call-overlay">
       <div className={`call-panel ${isDark ? "dark" : "light"}`}>
-        {isVideo && call.status === "active" ? (
+
+        {/* ── FIX: show local video during pending too so caller sees themselves ── */}
+        {isVideo ? (
           <div className="call-video-wrap">
-            <video ref={remoteVideoRef} autoPlay playsInline className="call-remote-video" />
+            {call.status === "active" && (
+              <video ref={remoteVideoRef} autoPlay playsInline className="call-remote-video" />
+            )}
             <video ref={localVideoRef} autoPlay playsInline muted className="call-local-video" />
           </div>
         ) : (
@@ -176,6 +187,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
             <div className="call-pulse" />
           </div>
         )}
+
         <div className="call-peer-name">{call.peer}</div>
         {isPending && isIncoming && (
           <div className="call-status-text">Incoming {isVideo ? "video" : "voice"} call…</div>
@@ -325,6 +337,8 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [hoveredMsg, setHoveredMsg] = useState(null);
   const [call, setCall] = useState(null);
   const [facingMode, setFacingMode] = useState("user");
+  // ── FIX 3: track when socket is ready so message listeners register correctly
+  const [socketReady, setSocketReady] = useState(false);
 
   const socketRef = useRef(null);
   const pcRef = useRef(null);
@@ -380,12 +394,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     pcRef.current = pc;
     return pc;
   }, []);
-
-  // ── FIX: voice call — correct constraints, always request audio ─────────────
-  const getMediaConstraints = (type) => ({
-    audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
-    video: type === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
-  });
 
   const startCall = useCallback(async (peer, type) => {
     if (call) return;
@@ -448,7 +456,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     }
   }, [call, createPC, flushIceCandidates, stopLocalStream]);
 
-  // ── Camera switch (front/back) ──────────────────────────────────────────────
+  // ── FIX 2: camera switch — mutate ref BEFORE setCall, not inside it ──────────
   const handleSwitchCamera = useCallback(async () => {
     if (!localStreamRef.current || !pcRef.current) return;
     const newFacing = facingMode === "user" ? "environment" : "user";
@@ -460,16 +468,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       const newVideoTrack = newStream.getVideoTracks()[0];
       const sender = pcRef.current.getSenders().find(s => s.track && s.track.kind === "video");
       if (sender) await sender.replaceTrack(newVideoTrack);
+
+      // ── stop old video tracks
       localStreamRef.current.getVideoTracks().forEach(t => t.stop());
-      setCall(prev => {
-        if (!prev) return prev;
-        const newMediaStream = new MediaStream([
-          ...localStreamRef.current.getAudioTracks(),
-          newVideoTrack,
-        ]);
-        localStreamRef.current = newMediaStream;
-        return { ...prev, stream: newMediaStream };
-      });
+
+      // ── build new stream and update ref BEFORE calling setCall
+      const newMediaStream = new MediaStream([
+        ...localStreamRef.current.getAudioTracks(),
+        newVideoTrack,
+      ]);
+      localStreamRef.current = newMediaStream;
+
+      // ── now safely update state
+      setCall(prev => prev ? { ...prev, stream: newMediaStream } : prev);
       setFacingMode(newFacing);
     } catch (e) {
       console.warn("Camera switch failed:", e);
@@ -481,18 +492,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   useEffect(() => {
     const socket = io(BACKEND_URL, {
       transports: ["websocket", "polling"],
-      // ── FIX: increase payload limit for file attachments ──
-      maxHttpBufferSize: 10 * 1024 * 1024, // 10MB
+      maxHttpBufferSize: 10 * 1024 * 1024,
     });
     socketRef.current = socket;
 
     socket.on("connect", () => {
       console.log("Socket connected:", socket.id);
       socket.emit("user_online", { username: user.username });
+      setSocketReady(true); // ── FIX 3: signal that socket is ready
     });
 
     socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
+      setSocketReady(false);
     });
 
     socket.on("connect_error", (err) => {
@@ -508,43 +520,45 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     return () => {
       clearInterval(interval);
       socket.disconnect();
+      setSocketReady(false);
     };
   }, [user.username]);
 
   // ── Socket: messages ────────────────────────────────────────────────────────
+  // ── FIX 3: added socketReady to dependencies so listeners register after connect
   useEffect(() => {
     const socket = socketRef.current;
-if (!socket) return;
+    if (!socket || !socketReady) return;
 
-const handleMessage = (msg) => {
-  if (msg.room === activeRoomRef.current) {
-    setMessages(prev => {
-      // Remove matching optimistic message
-      const filtered = prev.filter(
-        m =>
-          !(
-            m._isLocal &&
-            m.sender === msg.sender &&
-            m.message === msg.message
-          )
-      );
-
-      return [
-        ...filtered,
-        {
-          ...msg,
-          time: getTime(),
-          _isLocal: false,
-        },
-      ];
-    });
-  } else if (msg.sender !== user.username) {
-    setUnreadCounts(prev => ({
-      ...prev,
-      [msg.room]: (prev[msg.room] || 0) + 1,
-    }));
-  }
-};
+    const handleMessage = (msg) => {
+      if (msg.room === activeRoomRef.current) {
+        setMessages(prev => {
+          // ── FIX: match optimistic messages by file name too, not just text
+          const filtered = prev.filter(
+            m =>
+              !(
+                m._isLocal &&
+                m.sender === msg.sender &&
+                m.message === msg.message &&
+                (m.fileData?.name ?? null) === (msg.fileData?.name ?? null)
+              )
+          );
+          return [
+            ...filtered,
+            {
+              ...msg,
+              time: getTime(),
+              _isLocal: false,
+            },
+          ];
+        });
+      } else if (msg.sender !== user.username) {
+        setUnreadCounts(prev => ({
+          ...prev,
+          [msg.room]: (prev[msg.room] || 0) + 1,
+        }));
+      }
+    };
 
     socket.on("receive_message", handleMessage);
     socket.on("message_edited", (updatedMsg) => {
@@ -559,7 +573,7 @@ const handleMessage = (msg) => {
       socket.off("message_edited");
       socket.off("message_deleted");
     };
-  }, [user.username]);
+  }, [user.username, socketReady]);
 
   // ── Socket: call signaling ──────────────────────────────────────────────────
   useEffect(() => {
@@ -570,15 +584,20 @@ const handleMessage = (msg) => {
       iceCandidateQueue.current = [];
       setCall({ peer: from, type, direction: "incoming", status: "pending", _offer: offer });
     });
+
     socket.on("call_answer", async ({ answer }) => {
       const pc = pcRef.current;
       if (pc) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
           await flushIceCandidates(pc);
+          // ── FIX: set active immediately for caller — don't rely only on ontrack
+          // (ontrack is unreliable for voice-only calls)
+          setCall(prev => prev ? { ...prev, status: "active" } : prev);
         } catch (e) { console.error("set answer error:", e); }
       }
     });
+
     socket.on("call_ice", async ({ candidate }) => {
       const pc = pcRef.current;
       if (!pc || !pc.remoteDescription?.type) {
@@ -588,6 +607,7 @@ const handleMessage = (msg) => {
       try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
       catch (e) { console.warn("ICE add error:", e); }
     });
+
     socket.on("call_end", () => { stopLocalStream(); setCall(null); });
 
     return () => {
@@ -650,7 +670,6 @@ const handleMessage = (msg) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
-  // ── FIX: file attachment — compress images, 5MB limit ──────────────────────
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -709,7 +728,6 @@ const handleMessage = (msg) => {
 
   const addEmoji = (emoji) => setText(prev => prev + emoji);
 
-  // ── FIX: sendMessage — check connection, optimistic UI ──────────────────────
   const sendMessage = () => {
     if (attachmentLoading) return;
     if (!text.trim() && !attachment) return;
@@ -734,7 +752,6 @@ const handleMessage = (msg) => {
       };
     }
 
-    // Optimistic message so UI feels instant
     const localMsg = {
       ...msgData,
       _id: `local_${Date.now()}`,
