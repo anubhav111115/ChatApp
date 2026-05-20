@@ -420,14 +420,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     }
   
     const pc = new RTCPeerConnection(ICE_SERVERS);
-  
-    pc.addTransceiver("audio", {
-      direction: "sendrecv",
-    });
-  
-    pc.addTransceiver("video", {
-      direction: "sendrecv",
-    });
+
   
     pc.onicecandidate = (e) => {
       if (e.candidate && socketRef.current)
