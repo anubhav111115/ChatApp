@@ -27,7 +27,6 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-// ── Call Overlay ─────────────────────────────────────────────────────────────
 function CallOverlay({ call, user, onEnd, isDark }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -51,7 +50,8 @@ function CallOverlay({ call, user, onEnd, isDark }) {
     return () => clearInterval(t);
   }, [call.status]);
 
-  const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+  const fmt = s =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   const toggleMute = () => {
     if (call.stream) {
@@ -87,37 +87,61 @@ function CallOverlay({ call, user, onEnd, isDark }) {
             <div className="call-pulse" />
           </div>
         )}
-
         <div className="call-peer-name">{call.peer}</div>
-
-        {isPending && isIncoming && <div className="call-status-text">Incoming {isVideo ? "video" : "voice"} call…</div>}
-        {isPending && !isIncoming && <div className="call-status-text">Calling…</div>}
-        {call.status === "active" && <div className="call-status-text call-timer">{fmt(duration)}</div>}
-
+        {isPending && isIncoming && (
+          <div className="call-status-text">
+            Incoming {isVideo ? "video" : "voice"} call…
+          </div>
+        )}
+        {isPending && !isIncoming && (
+          <div className="call-status-text">Calling…</div>
+        )}
+        {call.status === "active" && (
+          <div className="call-status-text call-timer">{fmt(duration)}</div>
+        )}
         <div className="call-controls">
           {call.status === "active" && (
             <>
-              <button className={`call-ctrl-btn ${muted ? "off" : ""}`} onClick={toggleMute} title={muted ? "Unmute" : "Mute"}>
+              <button
+                className={`call-ctrl-btn ${muted ? "off" : ""}`}
+                onClick={toggleMute}
+                title={muted ? "Unmute" : "Mute"}
+              >
                 {muted ? "🔇" : "🎤"}
               </button>
               {isVideo && (
-                <button className={`call-ctrl-btn ${camOff ? "off" : ""}`} onClick={toggleCam} title={camOff ? "Cam on" : "Cam off"}>
+                <button
+                  className={`call-ctrl-btn ${camOff ? "off" : ""}`}
+                  onClick={toggleCam}
+                  title={camOff ? "Cam on" : "Cam off"}
+                >
                   {camOff ? "📷" : "🎥"}
                 </button>
               )}
             </>
           )}
           {isPending && isIncoming && (
-            <button className="call-ctrl-btn accept" onClick={() => onEnd("accept")} title="Accept">✓</button>
+            <button
+              className="call-ctrl-btn accept"
+              onClick={() => onEnd("accept")}
+              title="Accept"
+            >
+              ✓
+            </button>
           )}
-          <button className="call-ctrl-btn end" onClick={() => onEnd("end")} title="End">✕</button>
+          <button
+            className="call-ctrl-btn end"
+            onClick={() => onEnd("end")}
+            title="End"
+          >
+            ✕
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Settings Panel ────────────────────────────────────────────────────────────
 function SettingsPanel({ user, onLogout, onClose, isDark }) {
   const [newUsername, setNewUsername] = useState(user.username);
   const [currentPass, setCurrentPass] = useState("");
@@ -156,11 +180,15 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
 
   return (
     <div className="settings-overlay" onClick={onClose}>
-      <div className={`settings-panel ${isDark ? "dark" : "light"}`} onClick={e => e.stopPropagation()}>
+      <div
+        className={`settings-panel ${isDark ? "dark" : "light"}`}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="settings-header">
           <div className="settings-title">Settings</div>
           <button className="settings-close" onClick={onClose}>&#x2715;</button>
         </div>
+
         <div className="settings-avatar-row">
           <div className="settings-avatar" style={{ background: getColor(user.username) }}>
             {user.username[0].toUpperCase()}
@@ -170,44 +198,84 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
             <div className="settings-ustatus">Online</div>
           </div>
         </div>
+
         <div className="settings-divider" />
         <div className="settings-section-label">Account</div>
+
         <div className="settings-field">
           <label className="settings-label">Username</label>
-          <input className="settings-input" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="New username" />
+          <input
+            className="settings-input"
+            value={newUsername}
+            onChange={e => setNewUsername(e.target.value)}
+            placeholder="New username"
+          />
         </div>
+
         <div className="settings-section-label" style={{ marginTop: 8 }}>Change Password</div>
+
         <div className="settings-field">
           <label className="settings-label">Current Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showCurrent ? "text" : "password"} value={currentPass} onChange={e => setCurrentPass(e.target.value)} placeholder="Required to save changes" />
-            <button className="settings-eye" onClick={() => setShowCurrent(!showCurrent)}>{showCurrent ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showCurrent ? "text" : "password"}
+              value={currentPass}
+              onChange={e => setCurrentPass(e.target.value)}
+              placeholder="Required to save changes"
+            />
+            <button className="settings-eye" onClick={() => setShowCurrent(!showCurrent)}>
+              {showCurrent ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
+
         <div className="settings-field">
           <label className="settings-label">New Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showNew ? "text" : "password"} value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Leave blank to keep current" />
-            <button className="settings-eye" onClick={() => setShowNew(!showNew)}>{showNew ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showNew ? "text" : "password"}
+              value={newPass}
+              onChange={e => setNewPass(e.target.value)}
+              placeholder="Leave blank to keep current"
+            />
+            <button className="settings-eye" onClick={() => setShowNew(!showNew)}>
+              {showNew ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
+
         <div className="settings-field">
           <label className="settings-label">Confirm New Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showConfirm ? "text" : "password"} value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Repeat new password" />
-            <button className="settings-eye" onClick={() => setShowConfirm(!showConfirm)}>{showConfirm ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showConfirm ? "text" : "password"}
+              value={confirmPass}
+              onChange={e => setConfirmPass(e.target.value)}
+              placeholder="Repeat new password"
+            />
+            <button className="settings-eye" onClick={() => setShowConfirm(!showConfirm)}>
+              {showConfirm ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
+
         {msg && <div className={`settings-msg ${msg.type}`}>{msg.text}</div>}
-        <button className="settings-save-btn" onClick={handleSave} disabled={loading}>{loading ? "Saving..." : "Save Changes"}</button>
+
+        <button className="settings-save-btn" onClick={handleSave} disabled={loading}>
+          {loading ? "Saving..." : "Save Changes"}
+        </button>
+
         <div className="settings-divider" />
+
         <button className="settings-logout-btn" onClick={onLogout}>Logout</button>
       </div>
     </div>
   );
 }
 
-// ── Main Chat ─────────────────────────────────────────────────────────────────
 function Chat({ user, onLogout, theme, toggleTheme }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -259,13 +327,15 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     ],
   };
 
-  // ── WebRTC ──
   const stopLocalStream = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
     }
-    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
   };
 
   const createPC = useCallback((peer) => {
@@ -327,31 +397,40 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     }
   };
 
-  // ── Online users ──
   useEffect(() => {
     socket.emit("user_online", { username: user.username });
     const interval = setInterval(() => socket.emit("user_online", { username: user.username }), 5000);
     socket.on("online_users", (users) => setOnlineUsers(users.filter(u => u !== user.username)));
-    return () => { clearInterval(interval); socket.off("online_users"); };
+    return () => {
+      clearInterval(interval);
+      socket.off("online_users");
+    };
   }, [user.username]);
 
-  // ── Messages ──
   useEffect(() => {
     const handleMessage = (msg) => {
       if (msg.room === activeRoomRef.current) {
         setMessages(prev => [...prev, { ...msg, time: getTime() }]);
       } else if (msg.sender !== user.username) {
-        setUnreadCounts(prev => ({ ...prev, [msg.room]: (prev[msg.room] || 0) + 1 }));
+        setUnreadCounts(prev => ({
+          ...prev,
+          [msg.room]: (prev[msg.room] || 0) + 1,
+        }));
       }
     };
+
     socket.on("receive_message", handleMessage);
 
     socket.on("message_edited", (updatedMsg) => {
-      setMessages(prev => prev.map(m => m._id === updatedMsg._id ? { ...updatedMsg, time: m.time } : m));
+      setMessages(prev =>
+        prev.map(m => m._id === updatedMsg._id ? { ...updatedMsg, time: m.time } : m)
+      );
     });
 
     socket.on("message_deleted", ({ messageId }) => {
-      setMessages(prev => prev.map(m => m._id === messageId ? { ...m, deleted: true, message: "" } : m));
+      setMessages(prev =>
+        prev.map(m => m._id === messageId ? { ...m, deleted: true, message: "" } : m)
+      );
     });
 
     return () => {
@@ -361,7 +440,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username]);
 
-  // ── WebRTC signaling ──
   useEffect(() => {
     socket.on("call_offer", ({ from, type, offer }) => {
       setCall({ peer: from, type, direction: "incoming", status: "pending", _offer: offer });
@@ -374,10 +452,13 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     });
     socket.on("call_ice", async ({ candidate }) => {
       if (pcRef.current) {
-        try { await pcRef.current.addIceCandidate(candidate); } catch {}
+        try { await pcRef.current.addIceCandidate(candidate); } catch (e) {}
       }
     });
-    socket.on("call_end", () => { stopLocalStream(); setCall(null); });
+    socket.on("call_end", () => {
+      stopLocalStream();
+      setCall(null);
+    });
     return () => {
       socket.off("call_offer");
       socket.off("call_answer");
@@ -386,7 +467,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, []);
 
-  // ── Room switch ──
   useEffect(() => {
     activeRoomRef.current = activeRoom;
     socket.emit("join_room", { room: activeRoom });
@@ -396,10 +476,15 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socket.off("chat_history");
     socket.off("user_typing");
     socket.on("chat_history", (history) => {
-      setMessages(history.map(m => ({
-        ...m,
-        time: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      })));
+      setMessages(
+        history.map(m => ({
+          ...m,
+          time: new Date(m.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }))
+      );
     });
     socket.on("user_typing", ({ username }) => {
       if (username !== user.username) {
@@ -431,7 +516,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   };
 
   const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
   const handleFileChange = (e) => {
@@ -505,7 +593,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socket.emit("delete_message", { messageId: msgId, room: activeRoom });
   };
 
-  const filteredUsers = onlineUsers.filter(u => u.toLowerCase().includes(search.toLowerCase()));
+  const filteredUsers = onlineUsers.filter(u =>
+    u.toLowerCase().includes(search.toLowerCase())
+  );
   const showGeneral = "general chat".includes(search.toLowerCase()) || search === "";
 
   return (
@@ -519,10 +609,17 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           </div>
         )}
 
-        {call && <CallOverlay call={call} user={user} onEnd={handleCallEnd} isDark={isDark} />}
+        {call && (
+          <CallOverlay call={call} user={user} onEnd={handleCallEnd} isDark={isDark} />
+        )}
 
         {showSettings && (
-          <SettingsPanel user={user} onLogout={onLogout} onClose={() => setShowSettings(false)} isDark={isDark} />
+          <SettingsPanel
+            user={user}
+            onLogout={onLogout}
+            onClose={() => setShowSettings(false)}
+            isDark={isDark}
+          />
         )}
 
         {/* Sidebar */}
@@ -535,8 +632,8 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             </button>
             <button className="icon-btn settings-btn" onClick={() => setShowSettings(true)} title="Settings">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
             </button>
           </div>
@@ -553,68 +650,131 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
           <div className="search-wrap">
             <span className="search-ico">🔍</span>
-            <input className="search-inp" placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} />
-            {search && <button className="search-clear" onClick={() => setSearch("")}>✕</button>}
+            <input
+              className="search-inp"
+              placeholder="Search users..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className="search-clear" onClick={() => setSearch("")}>✕</button>
+            )}
           </div>
 
           <div className="sidebar-scroll">
             {showGeneral && (
               <>
                 <div className="section-lbl">Rooms</div>
-                <div className={`contact ${activeRoom === "general" ? "active" : ""}`} onClick={() => switchRoom("general", "General Chat")}>
-                  <div className="contact-av" style={{ background: "linear-gradient(135deg,#6c63ff,#9b8fff)", fontSize: 18, width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>💬</div>
+                <div
+                  className={`contact ${activeRoom === "general" ? "active" : ""}`}
+                  onClick={() => switchRoom("general", "General Chat")}
+                >
+                  <div
+                    className="contact-av"
+                    style={{
+                      background: "linear-gradient(135deg,#6c63ff,#9b8fff)",
+                      fontSize: 18,
+                      width: 40,
+                      height: 40,
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    💬
+                  </div>
                   <div className="contact-info">
                     <div className="contact-name">General Chat</div>
                     <div className="contact-last">Everyone can chat here</div>
                   </div>
-                  {unreadCounts["general"] > 0 && <div className="unread-badge">{unreadCounts["general"]}</div>}
+                  {unreadCounts["general"] > 0 && (
+                    <div className="unread-badge">{unreadCounts["general"]}</div>
+                  )}
                 </div>
               </>
             )}
 
             <div className="section-lbl">Online — {filteredUsers.length}</div>
-            {filteredUsers.length === 0 && search === "" && <div className="empty-users">No other users online</div>}
-            {filteredUsers.length === 0 && search !== "" && <div className="empty-users">No results for "{search}"</div>}
+
+            {filteredUsers.length === 0 && search === "" && (
+              <div className="empty-users">No other users online</div>
+            )}
+            {filteredUsers.length === 0 && search !== "" && (
+              <div className="empty-users">No results for "{search}"</div>
+            )}
 
             {filteredUsers.map((u, i) => {
               const roomId = getRoomId(user.username, u);
               return (
-                <div key={i} className={`contact ${activeRoom === roomId ? "active" : ""}`} onClick={() => switchRoom(roomId, u)}>
+                <div
+                  key={i}
+                  className={`contact ${activeRoom === roomId ? "active" : ""}`}
+                  onClick={() => switchRoom(roomId, u)}
+                >
                   <div className="contact-av-wrap">
-                    <div className="contact-av" style={{ background: getColor(u) }}>{u[0].toUpperCase()}</div>
+                    <div className="contact-av" style={{ background: getColor(u) }}>
+                      {u[0].toUpperCase()}
+                    </div>
                     <span className="online-badge" />
                   </div>
                   <div className="contact-info">
                     <div className="contact-name">{u}</div>
                     <div className="contact-last online-text">Online</div>
                   </div>
-                  {unreadCounts[roomId] > 0 && <div className="unread-badge">{unreadCounts[roomId]}</div>}
+                  {unreadCounts[roomId] > 0 && (
+                    <div className="unread-badge">{unreadCounts[roomId]}</div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Main */}
+        {/* Main Chat */}
         <div className="chat-main">
           <div className="chat-header">
-            <div className="ch-av" style={{ background: activeRoom === "general" ? "linear-gradient(135deg,#6c63ff,#9b8fff)" : getColor(activeRoomName), fontSize: activeRoom === "general" ? 20 : 16 }}>
+            <div
+              className="ch-av"
+              style={{
+                background: activeRoom === "general"
+                  ? "linear-gradient(135deg,#6c63ff,#9b8fff)"
+                  : getColor(activeRoomName),
+                fontSize: activeRoom === "general" ? 20 : 16,
+              }}
+            >
               {activeRoom === "general" ? "💬" : activeRoomName[0].toUpperCase()}
             </div>
             <div className="ch-info">
               <div className="ch-name">{activeRoomName}</div>
               <div className="ch-status">
                 <span className="online-dot" />
-                {activeRoom === "general" ? `${onlineUsers.length + 1} members online` : "Private · End-to-end encrypted"}
+                {activeRoom === "general"
+                  ? `${onlineUsers.length + 1} members online`
+                  : "Private · End-to-end encrypted"}
               </div>
             </div>
             {activeRoom !== "general" && (
               <div className="ch-actions">
-                <button className="call-icon-btn voice" onClick={() => startCall(activeRoomName, "voice")} title="Voice call">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.21 6.21l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <button
+                  className="call-icon-btn voice"
+                  onClick={() => startCall(activeRoomName, "voice")}
+                  title="Voice call"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.21 6.21l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
                 </button>
-                <button className="call-icon-btn video" onClick={() => startCall(activeRoomName, "video")} title="Video call">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                <button
+                  className="call-icon-btn video"
+                  onClick={() => startCall(activeRoomName, "video")}
+                  title="Video call"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="23 7 16 12 23 17 23 7" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                  </svg>
                 </button>
               </div>
             )}
@@ -624,7 +784,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             {messages.length === 0 && (
               <div className="empty-chat">
                 <div className="empty-icon">{activeRoom === "general" ? "💬" : "🔒"}</div>
-                <p className="empty-title">{activeRoom === "general" ? "Welcome to General Chat!" : `Private chat with ${activeRoomName}`}</p>
+                <p className="empty-title">
+                  {activeRoom === "general"
+                    ? "Welcome to General Chat!"
+                    : `Private chat with ${activeRoomName}`}
+                </p>
                 <p className="empty-sub">Be the first to say hello</p>
               </div>
             )}
@@ -644,14 +808,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                   onMouseLeave={() => setHoveredMsg(null)}
                 >
                   {!mine && (
-                    <div className="msg-av" style={{ background: getColor(msg.sender), opacity: showAv ? 1 : 0 }}>
+                    <div
+                      className="msg-av"
+                      style={{ background: getColor(msg.sender), opacity: showAv ? 1 : 0 }}
+                    >
                       {msg.sender[0].toUpperCase()}
                     </div>
                   )}
 
                   <div className="bwrap">
                     {!mine && showName && !isDeleted && (
-                      <div className="bsender" style={{ color: getColor(msg.sender) }}>{msg.sender}</div>
+                      <div className="bsender" style={{ color: getColor(msg.sender) }}>
+                        {msg.sender}
+                      </div>
                     )}
 
                     {isEditing ? (
@@ -702,25 +871,41 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                               </a>
                             )}
                             {msg.image && !msg.fileData && (
-                              <img src={msg.image} alt="attachment" className="bubble-img clickable" onClick={() => setLightboxImg(msg.image)} />
+                              <img
+                                src={msg.image}
+                                alt="attachment"
+                                className="bubble-img clickable"
+                                onClick={() => setLightboxImg(msg.image)}
+                              />
                             )}
-                            {msg.message && <span className="btext">{msg.message}</span>}
-                            {msg.edited && <span className="edited-tag">edited</span>}
+                            {msg.message && (
+                              <span className="btext">{msg.message}</span>
+                            )}
+                            {msg.edited && (
+                              <span className="edited-tag">edited</span>
+                            )}
                             <span className="btime">{msg.time}</span>
                           </>
                         )}
                       </div>
                     )}
 
-                    {/* Edit/Delete buttons — show on hover for own messages only */}
                     {mine && !isDeleted && !isEditing && hoveredMsg === msg._id && (
-                      <div className={`msg-actions ${mine ? "mine" : ""}`}>
+                      <div className="msg-actions mine">
                         {msg.message && !msg.fileData && (
-                          <button className="msg-action-btn edit" onClick={() => startEdit(msg)} title="Edit">
+                          <button
+                            className="msg-action-btn edit"
+                            onClick={() => startEdit(msg)}
+                            title="Edit"
+                          >
                             ✏️
                           </button>
                         )}
-                        <button className="msg-action-btn delete" onClick={() => deleteMessage(msg._id)} title="Delete">
+                        <button
+                          className="msg-action-btn delete"
+                          onClick={() => deleteMessage(msg._id)}
+                          title="Delete"
+                        >
                           🗑️
                         </button>
                       </div>
@@ -738,9 +923,13 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
             {isTyping && (
               <div className="msg-row">
-                <div className="msg-av" style={{ background: getColor(typingUser) }}>{typingUser[0]?.toUpperCase()}</div>
+                <div className="msg-av" style={{ background: getColor(typingUser) }}>
+                  {typingUser[0]?.toUpperCase()}
+                </div>
                 <div className="bubble theirs typing-bubble">
-                  <span className="tdot" /><span className="tdot" /><span className="tdot" />
+                  <span className="tdot" />
+                  <span className="tdot" />
+                  <span className="tdot" />
                 </div>
               </div>
             )}
@@ -767,17 +956,51 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           {showEmojiPicker && (
             <div className="emoji-picker">
               {EMOJIS.map((em, i) => (
-                <button key={i} className="emoji-opt" onClick={() => addEmoji(em)}>{em}</button>
+                <button key={i} className="emoji-opt" onClick={() => addEmoji(em)}>
+                  {em}
+                </button>
               ))}
             </div>
           )}
 
           <div className="input-area">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: "none" }} accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx" />
-            <button className="input-icon-btn" title="Attach file" onClick={() => fileInputRef.current.click()}>📎</button>
-            <button className={`input-icon-btn ${showEmojiPicker ? "active" : ""}`} title="Emoji" onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}>😊</button>
-            <textarea className="msg-input" placeholder={`Message ${activeRoomName}...`} value={text} onChange={handleTyping} onKeyDown={handleKey} rows={1} />
-            <button className={`send-btn ${(text.trim() || attachment) ? "ready" : ""}`} onClick={sendMessage} disabled={!text.trim() && !attachment}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              style={{ display: "none" }}
+              accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx"
+            />
+            <button
+              className="input-icon-btn"
+              title="Attach file"
+              onClick={() => fileInputRef.current.click()}
+            >
+              📎
+            </button>
+            <button
+              className={`input-icon-btn ${showEmojiPicker ? "active" : ""}`}
+              title="Emoji"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEmojiPicker(!showEmojiPicker);
+              }}
+            >
+              😊
+            </button>
+            <textarea
+              className="msg-input"
+              placeholder={`Message ${activeRoomName}...`}
+              value={text}
+              onChange={handleTyping}
+              onKeyDown={handleKey}
+              rows={1}
+            />
+            <button
+              className={`send-btn ${(text.trim() || attachment) ? "ready" : ""}`}
+              onClick={sendMessage}
+              disabled={!text.trim() && !attachment}
+            >
               &#x27A4;
             </button>
           </div>
