@@ -3,7 +3,8 @@ import { io } from "socket.io-client";
 import axios from "axios";
 import "./Chat.css";
 
-const socket = io("http://localhost:5000");
+// ✅ REMOVED: const socket = io("http://localhost:5000"); — was causing all tabs to share one socket
+
 const COLORS = ["#6c63ff","#f78166","#3fb950","#d2a8ff","#ffa657","#79c0ff","#ff7b72","#43e8d8"];
 
 function getColor(name) {
@@ -295,6 +296,8 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [hoveredMsg, setHoveredMsg] = useState(null);
   const [call, setCall] = useState(null);
 
+  // ✅ FIX: socket is now a ref, created per user session inside the component
+  const socketRef = useRef(null);
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
   const activeRoomRef = useRef("general");
@@ -341,7 +344,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const createPC = useCallback((peer) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pc.onicecandidate = (e) => {
-      if (e.candidate) socket.emit("call_ice", { to: peer, candidate: e.candidate });
+      if (e.candidate) socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
     };
     pc.ontrack = (e) => {
       setCall(prev => prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev);
@@ -362,7 +365,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socket.emit("call_offer", { to: peer, from: user.username, type, offer });
+      socketRef.current.emit("call_offer", { to: peer, from: user.username, type, offer });
       setCall({ peer, type, direction: "outgoing", status: "pending", stream });
     } catch (err) {
       alert("Could not access microphone/camera. Please allow permissions and try again.");
@@ -383,7 +386,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         await pc.setRemoteDescription(call._offer);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit("call_answer", { to: call.peer, answer });
+        socketRef.current.emit("call_answer", { to: call.peer, answer });
         setCall(prev => ({ ...prev, stream, status: "active" }));
       } catch (err) {
         alert("Could not access microphone/camera. Please allow permissions.");
@@ -391,23 +394,37 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         setCall(null);
       }
     } else {
-      socket.emit("call_end", { to: call?.peer });
+      socketRef.current.emit("call_end", { to: call?.peer });
       stopLocalStream();
       setCall(null);
     }
   };
 
+  // ✅ FIX: Create a fresh socket per user login, disconnect on logout/unmount
   useEffect(() => {
+    const socket = io("http://localhost:5000");
+    socketRef.current = socket;
+
     socket.emit("user_online", { username: user.username });
-    const interval = setInterval(() => socket.emit("user_online", { username: user.username }), 5000);
-    socket.on("online_users", (users) => setOnlineUsers(users.filter(u => u !== user.username)));
+    const interval = setInterval(() => {
+      socket.emit("user_online", { username: user.username });
+    }, 5000);
+
+    socket.on("online_users", (users) =>
+      setOnlineUsers(users.filter(u => u !== user.username))
+    );
+
     return () => {
       clearInterval(interval);
-      socket.off("online_users");
+      socket.disconnect();
     };
   }, [user.username]);
 
+  // ✅ Messages listeners
   useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
     const handleMessage = (msg) => {
       if (msg.room === activeRoomRef.current) {
         setMessages(prev => [...prev, { ...msg, time: getTime() }]);
@@ -440,7 +457,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username]);
 
+  // ✅ Call listeners
   useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
     socket.on("call_offer", ({ from, type, offer }) => {
       setCall({ peer: from, type, direction: "incoming", status: "pending", _offer: offer });
     });
@@ -459,6 +480,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       stopLocalStream();
       setCall(null);
     });
+
     return () => {
       socket.off("call_offer");
       socket.off("call_answer");
@@ -467,14 +489,20 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, []);
 
+  // ✅ Room switching
   useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
     activeRoomRef.current = activeRoom;
     socket.emit("join_room", { room: activeRoom });
     setMessages([]);
     setIsTyping(false);
     setUnreadCounts(prev => ({ ...prev, [activeRoom]: 0 }));
+
     socket.off("chat_history");
     socket.off("user_typing");
+
     socket.on("chat_history", (history) => {
       setMessages(
         history.map(m => ({
@@ -486,6 +514,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         }))
       );
     });
+
     socket.on("user_typing", ({ username }) => {
       if (username !== user.username) {
         setTypingUser(username);
@@ -512,7 +541,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const handleTyping = (e) => {
     setText(e.target.value);
-    socket.emit("typing", { username: user.username, room: activeRoom });
+    socketRef.current.emit("typing", { username: user.username, room: activeRoom });
   };
 
   const handleKey = (e) => {
@@ -565,7 +594,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         isImage: attachment.isImage,
       };
     }
-    socket.emit("send_message", msgData);
+    socketRef.current.emit("send_message", msgData);
     setText("");
     setAttachment(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -579,7 +608,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const submitEdit = () => {
     if (!editText.trim()) return;
-    socket.emit("edit_message", {
+    socketRef.current.emit("edit_message", {
       messageId: editingMsg,
       newMessage: editText.trim(),
       room: activeRoom,
@@ -590,7 +619,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const deleteMessage = (msgId) => {
     if (!window.confirm("Delete this message?")) return;
-    socket.emit("delete_message", { messageId: msgId, room: activeRoom });
+    socketRef.current.emit("delete_message", { messageId: msgId, room: activeRoom });
   };
 
   const filteredUsers = onlineUsers.filter(u =>
