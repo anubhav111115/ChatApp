@@ -164,7 +164,8 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
     if (newPass && newPass.length < 4) return showMsg("error", "New password must be at least 4 characters");
     setLoading(true);
     try {
-      await axios.post("https://chatapp-frontend-5w3i.onrender.com/api/auth/update", {
+      await axios.post(
+        "https://ChatApp.onrender.com/api/auth/update", {
         username: user.username,
         currentPassword: currentPass,
         newUsername: newUsername !== user.username ? newUsername : undefined,
@@ -401,8 +402,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   // ✅ FIX: Create a fresh socket per user login, disconnect on logout/unmount
   useEffect(() => {
-    const socket = io("https://chatapp-frontend-5w3i.onrender.com");
-    socketRef.current = socket;
+    const socket = io("https://ChatApp.onrender.com", {
+      transports: ["websocket", "polling"],
+    });
+        socketRef.current = socket;
 
     socket.emit("user_online", { username: user.username });
     const interval = setInterval(() => {
