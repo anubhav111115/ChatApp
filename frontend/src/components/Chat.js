@@ -125,48 +125,33 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   useEffect(() => {
-    console.log("Remote stream state:", call?.remoteStream);
+    if (!remoteVideoRef.current || !call?.remoteStream)
+      return;
   
-    if (
-      remoteVideoRef.current &&
-      call?.remoteStream
-    ) {
+    const video = remoteVideoRef.current;
+  
+    // don't attach same stream repeatedly
+    if (video.srcObject !== call.remoteStream) {
       console.log("Attaching remote stream");
-  
-      remoteVideoRef.current.srcObject =
-        call.remoteStream;
-  
-      remoteVideoRef.current
-        .play()
-        .then(() =>
-          console.log("Remote video playing")
-        )
-        .catch(err =>
-          console.log(
-            "Video play error:",
-            err
-          )
-        );
+      video.srcObject = call.remoteStream;
     }
+  
+    const tryPlay = async () => {
+      try {
+        await video.play();
+        console.log("Remote video playing");
+      } catch (err) {
+        console.log("Play failed:", err);
+  
+        // iPhone Safari retry
+        setTimeout(() => {
+          video.play().catch(console.error);
+        }, 500);
+      }
+    };
+  
+    video.onloadedmetadata = tryPlay;
   }, [call?.remoteStream]);
-  const [duration, setDuration] = useState(0);
-  const [muted, setMuted] = useState(false);
-  const [camOff, setCamOff] = useState(false);
-
-  // Assign local stream whenever it changes
-  useEffect(() => {
-    if (call.stream && localVideoRef.current) {
-      localVideoRef.current.srcObject = call.stream;
-    }
-  }, [call.stream]);
-
-  // FIX: assign remote stream and call play() — ref always exists now (video always in DOM)
-  useEffect(() => {
-    if (call.remoteStream && remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = call.remoteStream;
-      remoteVideoRef.current.play().catch(err => console.log("Remote play failed:", err));
-    }
-  }, [call.remoteStream]);
 
   useEffect(() => {
     if (call.status !== "active") return;
@@ -211,6 +196,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   ref={remoteVideoRef}
   autoPlay
   playsInline
+  muted
   className="call-remote-video"
 />
 <video
