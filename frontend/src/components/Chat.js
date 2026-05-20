@@ -856,8 +856,8 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                             )}
                             {msg.fileData && !msg.fileData.isImage && (
                               
-                                href={msg.fileData.data}
-                                download={msg.fileData.name}
+                                href={msg.fileData.data},
+                                download={msg.fileData.name},
                                 className="file-download-link"
                               >
                                 <div className="file-card">
