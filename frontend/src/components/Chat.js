@@ -3,7 +3,6 @@ import { io } from "socket.io-client";
 import axios from "axios";
 import "./Chat.css";
 
-// ✅ REMOVED: const socket = io("http://localhost:5000"); — was causing all tabs to share one socket
 
 const COLORS = ["#6c63ff","#f78166","#3fb950","#d2a8ff","#ffa657","#79c0ff","#ff7b72","#43e8d8"];
 
@@ -165,7 +164,7 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
     if (newPass && newPass.length < 4) return showMsg("error", "New password must be at least 4 characters");
     setLoading(true);
     try {
-      await axios.post("http://localhost:5000/api/auth/update", {
+      await axios.post("https://chatapp-frontend-5w3i.onrender.com/api/auth/update", {
         username: user.username,
         currentPassword: currentPass,
         newUsername: newUsername !== user.username ? newUsername : undefined,
@@ -402,7 +401,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   // ✅ FIX: Create a fresh socket per user login, disconnect on logout/unmount
   useEffect(() => {
-    const socket = io("http://localhost:5000");
+    const socket = io("https://chatapp-frontend-5w3i.onrender.com");
     socketRef.current = socket;
 
     socket.emit("user_online", { username: user.username });
