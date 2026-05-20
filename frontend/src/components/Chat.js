@@ -28,7 +28,6 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-// ── FIX 1: moved outside Chat component to avoid stale closure ───────────────
 const getMediaConstraints = (type) => ({
   audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
   video: type === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
@@ -129,28 +128,18 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
 
-  // ── FIX: assign stream to video element whenever stream changes ──────────────
+  // Assign local stream whenever it changes
   useEffect(() => {
-    if (call.stream && localVideoRef.current)
+    if (call.stream && localVideoRef.current) {
       localVideoRef.current.srcObject = call.stream;
+    }
   }, [call.stream]);
 
+  // FIX: assign remote stream and call play() — ref always exists now (video always in DOM)
   useEffect(() => {
-    if (
-      call.remoteStream &&
-      remoteVideoRef.current
-    ) {
-      remoteVideoRef.current.srcObject =
-        call.remoteStream;
-  
-      remoteVideoRef.current
-        .play()
-        .catch((err) =>
-          console.log(
-            "Remote play failed:",
-            err
-          )
-        );
+    if (call.remoteStream && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = call.remoteStream;
+      remoteVideoRef.current.play().catch(err => console.log("Remote play failed:", err));
     }
   }, [call.remoteStream]);
 
@@ -185,19 +174,29 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     <div className="call-overlay">
       <div className={`call-panel ${isDark ? "dark" : "light"}`}>
 
-        {/* ── FIX: show local video during pending too so caller sees themselves ── */}
         {isVideo ? (
           <div className="call-video-wrap">
-            {call.status === "active" && (
-              <video
+            {/*
+              FIX: remote video is ALWAYS rendered (never conditionally removed).
+              We just hide it while pending so the ref is always attached to the DOM.
+              This ensures the useEffect above can assign srcObject as soon as
+              remoteStream arrives, without any ref-is-null race condition.
+            */}
+            <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
               muted={false}
               className="call-remote-video"
+              style={{ display: call.status === "active" ? "block" : "none" }}
             />
-            )}
-            <video ref={localVideoRef} autoPlay playsInline muted className="call-local-video" />
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="call-local-video"
+            />
           </div>
         ) : (
           <div className="call-avatar-wrap">
@@ -357,7 +356,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [hoveredMsg, setHoveredMsg] = useState(null);
   const [call, setCall] = useState(null);
   const [facingMode, setFacingMode] = useState("user");
-  // ── FIX 3: track when socket is ready so message listeners register correctly
   const [socketReady, setSocketReady] = useState(false);
 
   const socketRef = useRef(null);
@@ -395,55 +393,32 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const createPC = useCallback((peer) => {
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
     const pc = new RTCPeerConnection(ICE_SERVERS);
+
     pc.onicecandidate = (e) => {
       if (e.candidate && socketRef.current)
         socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
     };
+
     pc.oniceconnectionstatechange = () => {
       console.log("ICE state:", pc.iceConnectionState);
       if (pc.iceConnectionState === "failed") {
         try { pc.restartIce(); } catch (e) {}
       }
     };
+
+    // FIX: ontrack only updates state — no setTimeout/querySelector.
+    // The remote <video> element is always in the DOM (never conditionally removed),
+    // so the useEffect in CallOverlay will assign srcObject reliably via the ref.
     pc.ontrack = (e) => {
       console.log("Remote stream received:", e.streams);
-    
       if (e.streams && e.streams[0]) {
         const remoteStream = e.streams[0];
-    
         setCall(prev =>
-          prev
-            ? {
-                ...prev,
-                remoteStream,
-                status: "active",
-              }
-            : prev
+          prev ? { ...prev, remoteStream, status: "active" } : prev
         );
-    
-        // FORCE video refresh
-        setTimeout(() => {
-          const remoteVideo =
-            document.querySelector(
-              ".call-remote-video"
-            );
-    
-          if (remoteVideo) {
-            remoteVideo.srcObject =
-              remoteStream;
-    
-            remoteVideo
-              .play()
-              .catch((err) =>
-                console.log(
-                  "Remote video play error:",
-                  err
-                )
-              );
-          }
-        }, 100);
       }
     };
+
     pcRef.current = pc;
     return pc;
   }, []);
@@ -509,7 +484,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     }
   }, [call, createPC, flushIceCandidates, stopLocalStream]);
 
-  // ── FIX 2: camera switch — mutate ref BEFORE setCall, not inside it ──────────
   const handleSwitchCamera = useCallback(async () => {
     if (!localStreamRef.current || !pcRef.current) return;
     const newFacing = facingMode === "user" ? "environment" : "user";
@@ -522,17 +496,14 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       const sender = pcRef.current.getSenders().find(s => s.track && s.track.kind === "video");
       if (sender) await sender.replaceTrack(newVideoTrack);
 
-      // ── stop old video tracks
       localStreamRef.current.getVideoTracks().forEach(t => t.stop());
 
-      // ── build new stream and update ref BEFORE calling setCall
       const newMediaStream = new MediaStream([
         ...localStreamRef.current.getAudioTracks(),
         newVideoTrack,
       ]);
       localStreamRef.current = newMediaStream;
 
-      // ── now safely update state
       setCall(prev => prev ? { ...prev, stream: newMediaStream } : prev);
       setFacingMode(newFacing);
     } catch (e) {
@@ -552,7 +523,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socket.on("connect", () => {
       console.log("Socket connected:", socket.id);
       socket.emit("user_online", { username: user.username });
-      setSocketReady(true); // ── FIX 3: signal that socket is ready
+      setSocketReady(true);
     });
 
     socket.on("disconnect", (reason) => {
@@ -578,7 +549,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   }, [user.username]);
 
   // ── Socket: messages ────────────────────────────────────────────────────────
-  // ── FIX 3: added socketReady to dependencies so listeners register after connect
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket || !socketReady) return;
@@ -586,7 +556,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     const handleMessage = (msg) => {
       if (msg.room === activeRoomRef.current) {
         setMessages(prev => {
-          // ── FIX: match optimistic messages by file name too, not just text
           const filtered = prev.filter(
             m =>
               !(
@@ -644,8 +613,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
           await flushIceCandidates(pc);
-          // ── FIX: set active immediately for caller — don't rely only on ontrack
-          // (ontrack is unreliable for voice-only calls)
+          // Set active for caller immediately — voice calls may not trigger ontrack
           setCall(prev => prev ? { ...prev, status: "active" } : prev);
         } catch (e) { console.error("set answer error:", e); }
       }
