@@ -1411,26 +1411,34 @@
   
   /* ── Video call layout ── */
   .call-video-wrap {
-    position: relative;
-    width: 100%; height: 220px;
-    border-radius: 16px;
-    overflow: hidden;
-    background: #000;
-  }
-  
-  .call-remote-video {
-    width: 100%; height: 100%;
-    object-fit: cover;
-  }
-  
-  .call-local-video {
-    position: absolute;
-    bottom: 10px; right: 10px;
-    width: 80px; height: 60px;
-    border-radius: 8px;
-    object-fit: cover;
-    border: 2px solid rgba(255,255,255,0.3);
-  }
+  position: relative;
+  width: 100%;
+  height: 340px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+}
+
+.call-remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  display: block !important;
+}
+
+.call-local-video {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 110px;
+  height: 140px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #6c63ff;
+  z-index: 10;
+  background: #000;
+}
   
   /* ── Settings (keep existing, these are additions) ── */
   .settings-overlay {
@@ -1811,10 +1819,35 @@
 .call-ctrl-btn.accept:hover { background: #4ade80; color: white; }
 .call-ctrl-btn.end:hover { background: #ef4444; color: white; }
 
-.call-video-wrap { position: relative; width: 100%; height: 220px; border-radius: 12px; overflow: hidden; background: #000; }
-.call-remote-video { width: 100%; height: 100%; object-fit: cover; }
-.call-local-video { position: absolute; bottom: 8px; right: 8px; width: 80px; height: 60px; border-radius: 8px; object-fit: cover; border: 2px solid #6c63ff; }
+.call-video-wrap {
+  position: relative;
+  width: 100%;
+  height: 340px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+}
 
+.call-remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  display: block !important;
+}
+
+.call-local-video {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 110px;
+  height: 140px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #6c63ff;
+  z-index: 10;
+  background: #000;
+}
 /* Call buttons in header */
 .ch-actions { display: flex; gap: 8px; margin-left: auto; }
 

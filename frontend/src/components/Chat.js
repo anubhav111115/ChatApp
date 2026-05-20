@@ -188,7 +188,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               playsInline
               muted={false}
               className="call-remote-video"
-              style={{ display: call.status === "active" ? "block" : "none" }}
             />
             <video
               ref={localVideoRef}
