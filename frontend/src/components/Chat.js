@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import axios from "axios";
 import "./Chat.css";
 
-const socket = io("https://chatapp-16sp.onrender.com");
+const socket = io("http://localhost:5000");
 const COLORS = ["#6c63ff","#f78166","#3fb950","#d2a8ff","#ffa657","#79c0ff","#ff7b72","#43e8d8"];
 
 function getColor(name) {
@@ -27,83 +27,22 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function FileCard({ name, size, dataUrl, isDark }) {
-  const color = isDark ? "#8b5cf6" : "#6d28d9";
-
-  const handleDownload = () => {
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const formatSize = (bytes) => {
-    if (!bytes) return "";
-    const kb = bytes / 1024;
-    return kb < 1024
-      ? `${kb.toFixed(1)} KB`
-      : `${(kb / 1024).toFixed(1)} MB`;
-  };
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "10px",
-        borderRadius: "12px",
-        background: "rgba(255,255,255,0.08)",
-        marginTop: "8px",
-      }}
-    >
-      <div>
-        <div style={{ fontWeight: "600" }}>
-          📄 {name}
-        </div>
-        <div style={{ fontSize: "12px", opacity: 0.7 }}>
-          {formatSize(size)}
-        </div>
-      </div>
-
-      <button
-        onClick={handleDownload}
-        style={{
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          color,
-          fontSize: "20px",
-        }}
-        title="Download file"
-      >
-        ⬇️
-      </button>
-    </div>
-  );
-}
-
-// ── WebRTC Call UI ──────────────────────────────────────────────────────────
+// ── Call Overlay ─────────────────────────────────────────────────────────────
 function CallOverlay({ call, user, onEnd, isDark }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
-  const streamRef = useRef(null);
 
   useEffect(() => {
-    if (call.stream && localVideoRef.current) {
+    if (call.stream && localVideoRef.current)
       localVideoRef.current.srcObject = call.stream;
-    }
   }, [call.stream]);
 
   useEffect(() => {
-    if (call.remoteStream && remoteVideoRef.current) {
+    if (call.remoteStream && remoteVideoRef.current)
       remoteVideoRef.current.srcObject = call.remoteStream;
-    }
   }, [call.remoteStream]);
 
   useEffect(() => {
@@ -116,14 +55,14 @@ function CallOverlay({ call, user, onEnd, isDark }) {
 
   const toggleMute = () => {
     if (call.stream) {
-      call.stream.getAudioTracks().forEach(t => t.enabled = muted);
+      call.stream.getAudioTracks().forEach(t => { t.enabled = muted; });
       setMuted(!muted);
     }
   };
 
   const toggleCam = () => {
     if (call.stream) {
-      call.stream.getVideoTracks().forEach(t => t.enabled = camOff);
+      call.stream.getVideoTracks().forEach(t => { t.enabled = camOff; });
       setCamOff(!camOff);
     }
   };
@@ -151,54 +90,34 @@ function CallOverlay({ call, user, onEnd, isDark }) {
 
         <div className="call-peer-name">{call.peer}</div>
 
-        {isPending && isIncoming && (
-          <div className="call-status-text">Incoming {isVideo ? "video" : "voice"} call…</div>
-        )}
-        {isPending && !isIncoming && (
-          <div className="call-status-text">Calling…</div>
-        )}
-        {call.status === "active" && (
-          <div className="call-status-text call-timer">{fmt(duration)}</div>
-        )}
+        {isPending && isIncoming && <div className="call-status-text">Incoming {isVideo ? "video" : "voice"} call…</div>}
+        {isPending && !isIncoming && <div className="call-status-text">Calling…</div>}
+        {call.status === "active" && <div className="call-status-text call-timer">{fmt(duration)}</div>}
 
         <div className="call-controls">
           {call.status === "active" && (
             <>
               <button className={`call-ctrl-btn ${muted ? "off" : ""}`} onClick={toggleMute} title={muted ? "Unmute" : "Mute"}>
-                {muted ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                )}
+                {muted ? "🔇" : "🎤"}
               </button>
               {isVideo && (
-                <button className={`call-ctrl-btn ${camOff ? "off" : ""}`} onClick={toggleCam} title={camOff ? "Camera on" : "Camera off"}>
-                  {camOff ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34"/><path d="M15 13a3 3 0 1 1-4.24-4.24"/></svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                  )}
+                <button className={`call-ctrl-btn ${camOff ? "off" : ""}`} onClick={toggleCam} title={camOff ? "Cam on" : "Cam off"}>
+                  {camOff ? "📷" : "🎥"}
                 </button>
               )}
             </>
           )}
-
           {isPending && isIncoming && (
-            <button className="call-ctrl-btn accept" onClick={() => onEnd("accept")} title="Accept">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.21 6.21l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            </button>
+            <button className="call-ctrl-btn accept" onClick={() => onEnd("accept")} title="Accept">✓</button>
           )}
-
-          <button className="call-ctrl-btn end" onClick={() => onEnd("end")} title="End call">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.01 2.02l1.87-1.87a1 1 0 0 1 1-.25 11 11 0 0 0 3.44.87 1 1 0 0 1 .88 1v3.46a1 1 0 0 1-.91 1 17 17 0 0 1-16.05-16.05A1 1 0 0 1 4.83 3h3.45a1 1 0 0 1 1 .88 11 11 0 0 0 .87 3.44 1 1 0 0 1-.25 1L8.03 10.2a16 16 0 0 0 2.65 3.11z"/></svg>
-          </button>
+          <button className="call-ctrl-btn end" onClick={() => onEnd("end")} title="End">✕</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Settings Panel ──────────────────────────────────────────────────────────
+// ── Settings Panel ────────────────────────────────────────────────────────────
 function SettingsPanel({ user, onLogout, onClose, isDark }) {
   const [newUsername, setNewUsername] = useState(user.username);
   const [currentPass, setCurrentPass] = useState("");
@@ -221,7 +140,7 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
     if (newPass && newPass.length < 4) return showMsg("error", "New password must be at least 4 characters");
     setLoading(true);
     try {
-      await axios.post("https://chatapp-16sp.onrender.com/api/auth/update", {
+      await axios.post("http://localhost:5000/api/auth/update", {
         username: user.username,
         currentPassword: currentPass,
         newUsername: newUsername !== user.username ? newUsername : undefined,
@@ -288,7 +207,7 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
   );
 }
 
-// ── Main Chat ───────────────────────────────────────────────────────────────
+// ── Main Chat ─────────────────────────────────────────────────────────────────
 function Chat({ user, onLogout, theme, toggleTheme }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -299,27 +218,25 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [activeRoomName, setActiveRoomName] = useState("General Chat");
   const [search, setSearch] = useState("");
   const [attachment, setAttachment] = useState(null);
-  const [attachPreview, setAttachPreview] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [showSettings, setShowSettings] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
+  const [editingMsg, setEditingMsg] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [hoveredMsg, setHoveredMsg] = useState(null);
+  const [call, setCall] = useState(null);
 
-  // Call state
-  const [call, setCall] = useState(null); // { peer, type, direction, status, stream, remoteStream }
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
-  const iceCandidateBuffer = useRef([]);
   const activeRoomRef = useRef("general");
   const bottomRef = useRef(null);
   const typingTimer = useRef(null);
   const fileInputRef = useRef(null);
-  const activeRoomNameRef = useRef("General Chat");
 
   const EMOJIS = ["😀","😂","🔥","❤️","👍","🎉","😎","🤔","💯","🚀","😊","🙌","✨","😅","🤣","💪","🥳","😍","🤩","👏"];
   const isDark = theme === "dark";
 
-  // ── WebRTC helpers ──
   const ICE_SERVERS = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
@@ -341,15 +258,14 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       },
     ],
   };
+
+  // ── WebRTC ──
   const stopLocalStream = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
     }
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
+    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
   };
 
   const createPC = useCallback((peer) => {
@@ -366,28 +282,44 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const startCall = async (peer, type) => {
     if (call) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === "video" });
-    localStreamRef.current = stream;
-    const pc = createPC(peer);
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit("call_offer", { to: peer, from: user.username, type, offer });
-    setCall({ peer, type, direction: "outgoing", status: "pending", stream });
+    try {
+      const constraints = type === "video"
+        ? { audio: true, video: true }
+        : { audio: true, video: false };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      localStreamRef.current = stream;
+      const pc = createPC(peer);
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("call_offer", { to: peer, from: user.username, type, offer });
+      setCall({ peer, type, direction: "outgoing", status: "pending", stream });
+    } catch (err) {
+      alert("Could not access microphone/camera. Please allow permissions and try again.");
+      console.error("Call error:", err);
+    }
   };
 
   const handleCallEnd = async (action) => {
     if (action === "accept" && call) {
-      // Accept incoming call
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.type === "video" });
-      localStreamRef.current = stream;
-      const pc = createPC(call.peer);
-      stream.getTracks().forEach(t => pc.addTrack(t, stream));
-      await pc.setRemoteDescription(call._offer);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("call_answer", { to: call.peer, answer });
-      setCall(prev => ({ ...prev, stream, status: "active" }));
+      try {
+        const constraints = call.type === "video"
+          ? { audio: true, video: true }
+          : { audio: true, video: false };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        localStreamRef.current = stream;
+        const pc = createPC(call.peer);
+        stream.getTracks().forEach(t => pc.addTrack(t, stream));
+        await pc.setRemoteDescription(call._offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit("call_answer", { to: call.peer, answer });
+        setCall(prev => ({ ...prev, stream, status: "active" }));
+      } catch (err) {
+        alert("Could not access microphone/camera. Please allow permissions.");
+        stopLocalStream();
+        setCall(null);
+      }
     } else {
       socket.emit("call_end", { to: call?.peer });
       stopLocalStream();
@@ -395,7 +327,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     }
   };
 
-  // ── Socket: online users ──
+  // ── Online users ──
   useEffect(() => {
     socket.emit("user_online", { username: user.username });
     const interval = setInterval(() => socket.emit("user_online", { username: user.username }), 5000);
@@ -403,7 +335,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     return () => { clearInterval(interval); socket.off("online_users"); };
   }, [user.username]);
 
-  // ── Socket: messages ──
+  // ── Messages ──
   useEffect(() => {
     const handleMessage = (msg) => {
       if (msg.room === activeRoomRef.current) {
@@ -413,12 +345,25 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       }
     };
     socket.on("receive_message", handleMessage);
-    return () => socket.off("receive_message", handleMessage);
+
+    socket.on("message_edited", (updatedMsg) => {
+      setMessages(prev => prev.map(m => m._id === updatedMsg._id ? { ...updatedMsg, time: m.time } : m));
+    });
+
+    socket.on("message_deleted", ({ messageId }) => {
+      setMessages(prev => prev.map(m => m._id === messageId ? { ...m, deleted: true, message: "" } : m));
+    });
+
+    return () => {
+      socket.off("receive_message", handleMessage);
+      socket.off("message_edited");
+      socket.off("message_deleted");
+    };
   }, [user.username]);
 
-  // ── Socket: WebRTC signaling ──
+  // ── WebRTC signaling ──
   useEffect(() => {
-    socket.on("call_offer", async ({ from, type, offer }) => {
+    socket.on("call_offer", ({ from, type, offer }) => {
       setCall({ peer: from, type, direction: "incoming", status: "pending", _offer: offer });
     });
     socket.on("call_answer", async ({ answer }) => {
@@ -432,10 +377,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         try { await pcRef.current.addIceCandidate(candidate); } catch {}
       }
     });
-    socket.on("call_end", () => {
-      stopLocalStream();
-      setCall(null);
-    });
+    socket.on("call_end", () => { stopLocalStream(); setCall(null); });
     return () => {
       socket.off("call_offer");
       socket.off("call_answer");
@@ -454,15 +396,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socket.off("chat_history");
     socket.off("user_typing");
     socket.on("chat_history", (history) => {
-      const formatted = history.map((m) => ({
+      setMessages(history.map(m => ({
         ...m,
-        time: new Date(m.createdAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit"
-        })
-      }));
-    
-      setMessages(formatted);
+        time: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      })));
     });
     socket.on("user_typing", ({ username }) => {
       if (username !== user.username) {
@@ -481,12 +418,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const switchRoom = (roomId, roomName) => {
     setActiveRoom(roomId);
     setActiveRoomName(roomName);
-    activeRoomNameRef.current = roomName;
     setIsTyping(false);
     setAttachment(null);
-    setAttachPreview(null);
     setShowEmojiPicker(false);
     setUnreadCounts(prev => ({ ...prev, [roomId]: 0 }));
+    setEditingMsg(null);
   };
 
   const handleTyping = (e) => {
@@ -504,15 +440,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     const isImage = file.type.startsWith("image/");
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setAttachment({ name: file.name, size: file.size, type: file.type, dataUrl: ev.target.result, isImage });
-      if (isImage) setAttachPreview(ev.target.result);
+      setAttachment({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        dataUrl: ev.target.result,
+        isImage,
+      });
     };
     reader.readAsDataURL(file);
   };
 
   const removeAttachment = () => {
     setAttachment(null);
-    setAttachPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -523,46 +463,55 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const sendMessage = () => {
     if (!text.trim() && !attachment) return;
-  
     const msgData = {
       sender: user.username,
       room: activeRoom,
       message: text.trim(),
     };
-  
-    // FIXED attachment sending
     if (attachment) {
       msgData.fileData = {
         name: attachment.name,
         size: attachment.size,
         type: attachment.type,
-        data: attachment.dataUrl, // <-- changed from dataUrl to data
+        data: attachment.dataUrl,
         isImage: attachment.isImage,
       };
     }
-  
     socket.emit("send_message", msgData);
-  
     setText("");
     setAttachment(null);
-    setAttachPreview(null);
-  
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setShowEmojiPicker(false);
+  };
+
+  const startEdit = (msg) => {
+    setEditingMsg(msg._id);
+    setEditText(msg.message);
+  };
+
+  const submitEdit = () => {
+    if (!editText.trim()) return;
+    socket.emit("edit_message", {
+      messageId: editingMsg,
+      newMessage: editText.trim(),
+      room: activeRoom,
+    });
+    setEditingMsg(null);
+    setEditText("");
+  };
+
+  const deleteMessage = (msgId) => {
+    if (!window.confirm("Delete this message?")) return;
+    socket.emit("delete_message", { messageId: msgId, room: activeRoom });
   };
 
   const filteredUsers = onlineUsers.filter(u => u.toLowerCase().includes(search.toLowerCase()));
   const showGeneral = "general chat".includes(search.toLowerCase()) || search === "";
-  const activePeerForCall = activeRoom !== "general" ? activeRoomName : null;
 
   return (
     <div className={`chat-bg ${isDark ? "dark" : "light"}`}>
       <div className="chat-container">
 
-        {/* Lightbox */}
         {lightboxImg && (
           <div className="lightbox" onClick={() => setLightboxImg(null)}>
             <img src={lightboxImg} alt="full" className="lightbox-img" />
@@ -570,10 +519,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           </div>
         )}
 
-        {/* Call overlay */}
-        {call && (
-          <CallOverlay call={call} user={user} onEnd={handleCallEnd} isDark={isDark} />
-        )}
+        {call && <CallOverlay call={call} user={user} onEnd={handleCallEnd} isDark={isDark} />}
 
         {showSettings && (
           <SettingsPanel user={user} onLogout={onLogout} onClose={() => setShowSettings(false)} isDark={isDark} />
@@ -662,7 +608,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                 {activeRoom === "general" ? `${onlineUsers.length + 1} members online` : "Private · End-to-end encrypted"}
               </div>
             </div>
-            {/* Call buttons — only in private DMs */}
             {activeRoom !== "general" && (
               <div className="ch-actions">
                 <button className="call-icon-btn voice" onClick={() => startCall(activeRoomName, "voice")} title="Voice call">
@@ -688,51 +633,100 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
               const mine = msg.sender === user.username;
               const showName = i === 0 || messages[i - 1]?.sender !== msg.sender;
               const showAv = i === messages.length - 1 || messages[i + 1]?.sender !== msg.sender;
+              const isDeleted = msg.deleted;
+              const isEditing = editingMsg === msg._id;
+
               return (
-                <div key={i} className={`msg-row ${mine ? "mine" : ""}`}>
+                <div
+                  key={msg._id || i}
+                  className={`msg-row ${mine ? "mine" : ""}`}
+                  onMouseEnter={() => setHoveredMsg(msg._id)}
+                  onMouseLeave={() => setHoveredMsg(null)}
+                >
                   {!mine && (
                     <div className="msg-av" style={{ background: getColor(msg.sender), opacity: showAv ? 1 : 0 }}>
                       {msg.sender[0].toUpperCase()}
                     </div>
                   )}
-                  <div className="bwrap">
-                    {!mine && showName && <div className="bsender" style={{ color: getColor(msg.sender) }}>{msg.sender}</div>}
-                    <div className={`bubble ${mine ? "mine" : "theirs"}`}>
-                      {/* Image attachment */}
-{msg.fileData?.isImage && (
-  <img
-    src={msg.fileData.data}
-    alt={msg.fileData.name}
-    className="bubble-img clickable"
-    onClick={() => setLightboxImg(msg.fileData.data)}
-  />
-)}
 
-{/* File attachment */}
-{msg.fileData && !msg.fileData.isImage && (
-  <a
-    href={msg.fileData.data}
-    download={msg.fileData.name}
-    target="_blank"
-    rel="noreferrer"
-    style={{
-      color: "#8b5cf6",
-      textDecoration: "none",
-      display: "block",
-      marginTop: "8px"
-    }}
-  >
-    📄 {msg.fileData.name}
-  </a>
-)}
-                      {/* Legacy image support */}
-                      {msg.image && !msg.fileData && (
-                        <img src={msg.image} alt="attachment" className="bubble-img clickable" onClick={() => setLightboxImg(msg.image)} />
-                      )}
-                      {msg.message && <span className="btext">{msg.message}</span>}
-                      <span className="btime">{msg.time}</span>
-                    </div>
+                  <div className="bwrap">
+                    {!mine && showName && !isDeleted && (
+                      <div className="bsender" style={{ color: getColor(msg.sender) }}>{msg.sender}</div>
+                    )}
+
+                    {isEditing ? (
+                      <div className="edit-wrap">
+                        <input
+                          className="edit-input"
+                          value={editText}
+                          onChange={e => setEditText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") submitEdit();
+                            if (e.key === "Escape") setEditingMsg(null);
+                          }}
+                          autoFocus
+                        />
+                        <div className="edit-actions">
+                          <button className="edit-save" onClick={submitEdit}>Save</button>
+                          <button className="edit-cancel" onClick={() => setEditingMsg(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`bubble ${mine ? "mine" : "theirs"} ${isDeleted ? "deleted" : ""}`}>
+                        {isDeleted ? (
+                          <span className="deleted-text">🚫 Message deleted</span>
+                        ) : (
+                          <>
+                            {msg.fileData?.isImage && (
+                              <img
+                                src={msg.fileData.data}
+                                alt={msg.fileData.name}
+                                className="bubble-img clickable"
+                                onClick={() => setLightboxImg(msg.fileData.data)}
+                              />
+                            )}
+                            {msg.fileData && !msg.fileData.isImage && (
+                              
+                                href={msg.fileData.data}
+                                download={msg.fileData.name}
+                                className="file-download-link"
+                              >
+                                <div className="file-card">
+                                  <span className="file-card-icon">📄</span>
+                                  <div className="file-card-info">
+                                    <div className="file-card-name">{msg.fileData.name}</div>
+                                    <div className="file-card-size">{formatBytes(msg.fileData.size)}</div>
+                                  </div>
+                                  <span className="file-card-dl">⬇</span>
+                                </div>
+                              </a>
+                            )}
+                            {msg.image && !msg.fileData && (
+                              <img src={msg.image} alt="attachment" className="bubble-img clickable" onClick={() => setLightboxImg(msg.image)} />
+                            )}
+                            {msg.message && <span className="btext">{msg.message}</span>}
+                            {msg.edited && <span className="edited-tag">edited</span>}
+                            <span className="btime">{msg.time}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Edit/Delete buttons — show on hover for own messages only */}
+                    {mine && !isDeleted && !isEditing && hoveredMsg === msg._id && (
+                      <div className={`msg-actions ${mine ? "mine" : ""}`}>
+                        {msg.message && !msg.fileData && (
+                          <button className="msg-action-btn edit" onClick={() => startEdit(msg)} title="Edit">
+                            ✏️
+                          </button>
+                        )}
+                        <button className="msg-action-btn delete" onClick={() => deleteMessage(msg._id)} title="Delete">
+                          🗑️
+                        </button>
+                      </div>
+                    )}
                   </div>
+
                   {mine && (
                     <div className="msg-av" style={{ background: getColor(msg.sender) }}>
                       {msg.sender[0].toUpperCase()}
@@ -753,14 +747,13 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             <div ref={bottomRef} />
           </div>
 
-          {/* Attachment preview bar */}
           {attachment && (
             <div className="attach-preview">
               {attachment.isImage ? (
                 <img src={attachment.dataUrl} alt="preview" className="attach-img" />
               ) : (
                 <div className="attach-file-preview">
-                  <span className="attach-file-icon">📄</span>
+                  <span>📄</span>
                   <div>
                     <div className="attach-fname">{attachment.name}</div>
                     <div className="attach-fsize">{formatBytes(attachment.size)}</div>

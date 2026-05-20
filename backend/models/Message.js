@@ -2,19 +2,9 @@ const mongoose = require("mongoose");
 
 const messageSchema = new mongoose.Schema(
   {
-    sender: {
-      type: String,
-      required: true,
-    },
-    message: {
-      type: String,
-      default: "",
-    },
-    room: {
-      type: String,
-      required: true,
-      default: "general",
-    },
+    sender: { type: String, required: true },
+    message: { type: String, default: "" },
+    room: { type: String, required: true, default: "general" },
     fileData: {
       name: String,
       size: Number,
@@ -22,6 +12,8 @@ const messageSchema = new mongoose.Schema(
       data: String,
       isImage: Boolean,
     },
+    edited: { type: Boolean, default: false },
+    deleted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

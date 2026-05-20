@@ -36,6 +36,30 @@ module.exports = (io) => {
       }
     });
 
+    // Edit message
+    socket.on("edit_message", async ({ messageId, newMessage, room }) => {
+      try {
+        const msg = await Message.findByIdAndUpdate(
+          messageId,
+          { message: newMessage, edited: true },
+          { new: true }
+        );
+        io.to(room).emit("message_edited", msg);
+      } catch (err) {
+        console.error("Edit Message Error:", err);
+      }
+    });
+
+    // Delete message
+    socket.on("delete_message", async ({ messageId, room }) => {
+      try {
+        await Message.findByIdAndUpdate(messageId, { deleted: true, message: "", fileData: undefined });
+        io.to(room).emit("message_deleted", { messageId });
+      } catch (err) {
+        console.error("Delete Message Error:", err);
+      }
+    });
+
     socket.on("call_offer", ({ to, from, type, offer }) => {
       const targetSocket = userSockets[to];
       if (targetSocket) {
