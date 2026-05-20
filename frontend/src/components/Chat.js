@@ -165,7 +165,7 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
     setLoading(true);
     try {
       await axios.post(
-        "https://ChatApp.onrender.com/api/auth/update", {
+        "https://chatapp-16sp.onrender.com/api/auth/update", {
         username: user.username,
         currentPassword: currentPass,
         newUsername: newUsername !== user.username ? newUsername : undefined,
@@ -402,7 +402,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   // ✅ FIX: Create a fresh socket per user login, disconnect on logout/unmount
   useEffect(() => {
-    const socket = io("https://ChatApp.onrender.com", {
+    const socket = io("https://chatapp-16sp.onrender.com", {
       transports: ["websocket", "polling"],
     });
         socketRef.current = socket;
