@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/Chat.js << 'ENDOFFILE'
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import axios from "axios";
