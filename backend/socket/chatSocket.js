@@ -1,7 +1,7 @@
 const Message = require("../models/Message");
 
-let onlineUsers = {};   // socketId → username
-let userSockets = {};   // username → socketId  ✅ ADD THIS
+let onlineUsers = {};
+let userSockets = {};
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -9,7 +9,7 @@ module.exports = (io) => {
 
     socket.on("user_online", ({ username }) => {
       onlineUsers[socket.id] = username;
-      userSockets[username] = socket.id;  // ✅ Track reverse mapping
+      userSockets[username] = socket.id;
       io.emit("online_users", Object.values(onlineUsers));
     });
 
@@ -24,22 +24,18 @@ module.exports = (io) => {
     socket.on("send_message", async (data) => {
       try {
         const { sender, message, room, fileData } = data;
-    
         const saved = await Message.create({
           sender,
-          message,
+          message: message || "",
           room,
-          fileData,
+          fileData: fileData || undefined,
         });
-    
         io.to(room).emit("receive_message", saved);
-    
       } catch (err) {
         console.error("Send Message Error:", err);
       }
     });
 
-    // ✅ WebRTC call signaling - now userSockets is defined
     socket.on("call_offer", ({ to, from, type, offer }) => {
       const targetSocket = userSockets[to];
       if (targetSocket) {
@@ -51,23 +47,17 @@ module.exports = (io) => {
 
     socket.on("call_answer", ({ to, answer }) => {
       const targetSocket = userSockets[to];
-      if (targetSocket) {
-        io.to(targetSocket).emit("call_answer", { answer });
-      }
+      if (targetSocket) io.to(targetSocket).emit("call_answer", { answer });
     });
 
     socket.on("call_ice", ({ to, candidate }) => {
       const targetSocket = userSockets[to];
-      if (targetSocket) {
-        io.to(targetSocket).emit("call_ice", { candidate });
-      }
+      if (targetSocket) io.to(targetSocket).emit("call_ice", { candidate });
     });
 
     socket.on("call_end", ({ to }) => {
       const targetSocket = userSockets[to];
-      if (targetSocket) {
-        io.to(targetSocket).emit("call_end");
-      }
+      if (targetSocket) io.to(targetSocket).emit("call_end");
     });
 
     socket.on("typing", ({ username, room }) => {
@@ -76,11 +66,8 @@ module.exports = (io) => {
 
     socket.on("disconnect", () => {
       const username = onlineUsers[socket.id];
-
-      // ✅ Clean up BOTH maps on disconnect
       delete userSockets[username];
       delete onlineUsers[socket.id];
-
       io.emit("online_users", Object.values(onlineUsers));
       console.log("Disconnected:", socket.id, username);
     });

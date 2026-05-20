@@ -6,23 +6,20 @@ const messageSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-
     message: {
       type: String,
       default: "",
     },
-
     room: {
       type: String,
       required: true,
       default: "general",
     },
-
     fileData: {
       name: String,
       size: Number,
       type: String,
-      dataUrl: String,
+      data: String,
       isImage: Boolean,
     },
   },
