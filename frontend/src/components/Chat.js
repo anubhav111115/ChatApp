@@ -127,34 +127,43 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const [duration, setDuration] = useState(0);
 const [muted, setMuted] = useState(false);
 const [camOff, setCamOff] = useState(false);
-  useEffect(() => {
-    if (!remoteVideoRef.current || !call?.remoteStream)
-      return;
-  
-    const video = remoteVideoRef.current;
-  
-    // don't attach same stream repeatedly
-    if (video.srcObject !== call.remoteStream) {
-      console.log("Attaching remote stream");
-      video.srcObject = call.remoteStream;
+useEffect(() => {
+  if (!remoteVideoRef.current || !call?.remoteStream)
+    return;
+
+  const video = remoteVideoRef.current;
+
+  console.log("Attaching remote stream");
+
+  video.srcObject = call.remoteStream;
+
+  const playVideo = async () => {
+    try {
+      video.setAttribute("playsinline", true);
+      video.setAttribute("webkit-playsinline", true);
+
+      await video.play();
+
+      console.log("Remote video playing");
+    } catch (err) {
+      console.error("Video play error:", err);
+
+      setTimeout(async () => {
+        try {
+          await video.play();
+        } catch (e) {
+          console.error("Retry failed:", e);
+        }
+      }, 1000);
     }
-  
-    const tryPlay = async () => {
-      try {
-        await video.play();
-        console.log("Remote video playing");
-      } catch (err) {
-        console.log("Play failed:", err);
-  
-        // iPhone Safari retry
-        setTimeout(() => {
-          video.play().catch(console.error);
-        }, 500);
-      }
-    };
-  
-    video.onloadedmetadata = tryPlay;
-  }, [call?.remoteStream]);
+  };
+
+  video.onloadedmetadata = playVideo;
+
+  if (video.readyState >= 2) {
+    playVideo();
+  }
+}, [call?.remoteStream]);
 
   useEffect(() => {
     if (call.status !== "active") return;
@@ -199,7 +208,10 @@ const [camOff, setCamOff] = useState(false);
   ref={remoteVideoRef}
   autoPlay
   playsInline
-  muted
+  muted={false}
+  controls={false}
+  webkit-playsinline="true"
+  x-webkit-airplay="allow"
   className="call-remote-video"
 />
 <video
