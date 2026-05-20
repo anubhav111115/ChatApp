@@ -30,7 +30,9 @@ function formatBytes(bytes) {
 
 const getMediaConstraints = (type) => ({
   audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
-  video: type === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
+  video: type === "video"
+    ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+    : false,
 });
 
 const ICE_SERVERS = {
@@ -121,106 +123,251 @@ function EmojiPicker({ onSelect, onClose }) {
 }
 
 // ─── CALL OVERLAY ─────────────────────────────────────────────────────────────
+// All fixes applied:
+//  ✅ FIX 1 — Local video srcObject assigned via useEffect watching call.stream
+//  ✅ FIX 2 — visibilitychange handler resumes remote video on iOS tab-switch
+//  ✅ FIX 3 — Remote video: play muted → unmute (beats iOS/Android autoplay block)
+//  ✅ FIX 4 — Fullscreen targets .call-panel div (not the backdrop); uses CSS
+//             :fullscreen pseudo-class for styling, not a JS-toggled class
+//  ✅ FIX 5 — Local preview shows while outgoing call is pending (only remote hidden)
+//  ✅ FIX 6 — call-video-wrap gets position:relative via inline style so absolute
+//             children (fullscreen-btn, unmute-badge) position correctly
+//  ✅ FIX 7 — Double-tap handled manually for mobile (two touches within 300ms)
+//  ✅ FIX 8 — remoteMuted resets to true whenever call changes (new call = re-mute)
+//  ✅ FIX 9 — Clear enter/exit fullscreen icons (⛶ enter, ✕ / ⊡ exit)
+//  ✅ FIX 10 — Socket.io pingInterval/pingTimeout tuned in connection options
+
 function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
-  const localVideoRef = useRef(null);
+  const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
-  const [duration, setDuration] = useState(0);
-const [muted, setMuted] = useState(false);
-const [camOff, setCamOff] = useState(false);
-useEffect(() => {
-  if (!remoteVideoRef.current || !call?.remoteStream)
-    return;
+  const panelRef       = useRef(null); // ← fullscreen target is the PANEL, not backdrop
 
-  const video = remoteVideoRef.current;
+  const [duration,     setDuration]     = useState(0);
+  const [muted,        setMuted]        = useState(false);
+  const [camOff,       setCamOff]       = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [remoteMuted,  setRemoteMuted]  = useState(true);
 
-  console.log("Attaching remote stream");
-
-  video.srcObject = call.remoteStream;
-
-  const playVideo = async () => {
-    try {
-      video.setAttribute("playsinline", true);
-      video.setAttribute("webkit-playsinline", true);
-
-      await video.play();
-
-      console.log("Remote video playing");
-    } catch (err) {
-      console.error("Video play error:", err);
-
-      setTimeout(async () => {
-        try {
-          await video.play();
-        } catch (e) {
-          console.error("Retry failed:", e);
-        }
-      }, 1000);
-    }
-  };
-
-  video.onloadedmetadata = playVideo;
-
-  if (video.readyState >= 2) {
-    playVideo();
-  }
-}, [call?.remoteStream]);
-
+  // Reset remoteMuted whenever a new call starts
   useEffect(() => {
-    if (call.status !== "active") return;
+    setRemoteMuted(true);
+    setDuration(0);
+    setMuted(false);
+    setCamOff(false);
+  }, [call?.peer]);
+
+  // ── FIX 1: Attach LOCAL stream ──────────────────────────────────────────────
+  useEffect(() => {
+    const video = localVideoRef.current;
+    if (!video || !call?.stream) return;
+    video.srcObject = call.stream;
+    video.muted = true;
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+    video.play().catch(() => {});
+  }, [call?.stream]);
+
+  // ── FIX 3 + 2: Attach REMOTE stream with muted-first + visibilitychange ────
+  useEffect(() => {
+    const video = remoteVideoRef.current;
+    if (!video || !call?.remoteStream) return;
+
+    video.srcObject = call.remoteStream;
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+
+    const tryPlay = async () => {
+      try {
+        video.muted = true;
+        setRemoteMuted(true);
+        await video.play();
+        // Unmute right after successful play
+        video.muted = false;
+        setRemoteMuted(false);
+      } catch (err) {
+        console.error("Remote play error:", err);
+        // Retry once after short delay (Android timing)
+        setTimeout(async () => {
+          try {
+            video.muted = true;
+            await video.play();
+            video.muted = false;
+            setRemoteMuted(false);
+          } catch (e) {
+            console.error("Remote play retry failed:", e);
+            // Leave the unmute badge visible so user can tap
+          }
+        }, 800);
+      }
+    };
+
+    if (video.readyState >= 2) {
+      tryPlay();
+    } else {
+      video.onloadedmetadata = tryPlay;
+    }
+
+    // FIX 2: Resume video when user comes back to the tab (iOS Safari pauses it)
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && video.paused) {
+        video.play().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      video.onloadedmetadata = null;
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [call?.remoteStream]);
+
+  // ── Timer ───────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (call?.status !== "active") return;
     const t = setInterval(() => setDuration(d => d + 1), 1000);
     return () => clearInterval(t);
-  }, [call.status]);
+  }, [call?.status]);
+
+  // ── FIX 4: Fullscreen change listener ──────────────────────────────────────
+  useEffect(() => {
+    const onChange = () => {
+      const fsEl =
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement;
+      setIsFullscreen(!!fsEl);
+    };
+    document.addEventListener("fullscreenchange",       onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    document.addEventListener("mozfullscreenchange",    onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange",       onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+      document.removeEventListener("mozfullscreenchange",    onChange);
+    };
+  }, []);
 
   const fmt = s =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   const toggleMute = () => {
-    if (call.stream) {
+    if (call?.stream) {
       call.stream.getAudioTracks().forEach(t => { t.enabled = muted; });
-      setMuted(!muted);
+      setMuted(m => !m);
     }
   };
 
   const toggleCam = () => {
-    if (call.stream) {
+    if (call?.stream) {
       call.stream.getVideoTracks().forEach(t => { t.enabled = camOff; });
-      setCamOff(!camOff);
+      setCamOff(c => !c);
     }
   };
 
-  const isVideo = call.type === "video";
-  const isIncoming = call.direction === "incoming";
-  const isPending = call.status === "pending";
+  // ── FIX 4: Fullscreen targets panelRef (.call-panel), not the backdrop ──────
+  const doEnterFullscreen = (el) => {
+    if (!el) return;
+    if      (el.requestFullscreen)            el.requestFullscreen();
+    else if (el.webkitRequestFullscreen)      el.webkitRequestFullscreen();
+    else if (el.webkitEnterFullscreen)        el.webkitEnterFullscreen(); // iOS <video>
+    else if (el.mozRequestFullScreen)         el.mozRequestFullScreen();
+  };
+
+  const doExitFullscreen = () => {
+    if      (document.exitFullscreen)             document.exitFullscreen();
+    else if (document.webkitExitFullscreen)       document.webkitExitFullscreen();
+    else if (document.mozCancelFullScreen)        document.mozCancelFullScreen();
+  };
+
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      doExitFullscreen();
+    } else {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      // iOS Safari can only fullscreen a <video> element directly
+      if (isIOS) {
+        doEnterFullscreen(remoteVideoRef.current);
+      } else {
+        doEnterFullscreen(panelRef.current);
+      }
+    }
+  };
+
+  // ── FIX 7: Manual double-tap for mobile fullscreen ──────────────────────────
+  const lastTapRef = useRef(0);
+  const handleTouchEnd = (e) => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      e.preventDefault();
+      toggleFullscreen();
+    }
+    lastTapRef.current = now;
+  };
+
+  const handleUnmute = () => {
+    const video = remoteVideoRef.current;
+    if (video) { video.muted = false; setRemoteMuted(false); }
+  };
+
+  const isVideo    = call?.type === "video";
+  const isIncoming = call?.direction === "incoming";
+  const isPending  = call?.status === "pending";
+  // FIX 5: Only hide remote video while pending — local preview always visible
+  const hideRemote = isPending;
 
   return (
     <div className="call-overlay">
-      <div className={`call-panel ${isDark ? "dark" : "light"}`}>
-
+      {/* FIX 4: panelRef here, not on the backdrop */}
+      <div
+        ref={panelRef}
+        className={`call-panel ${isDark ? "dark" : "light"}`}
+      >
         {isVideo ? (
-          <div className="call-video-wrap">
-            {/*
-              FIX: remote video is ALWAYS rendered (never conditionally removed).
-              We just hide it while pending so the ref is always attached to the DOM.
-              This ensures the useEffect above can assign srcObject as soon as
-              remoteStream arrives, without any ref-is-null race condition.
-            */}
+          <div
+            className="call-video-wrap"
+            style={{ position: "relative" }}         // FIX 6: needed for absolute children
+            onDoubleClick={toggleFullscreen}          // desktop double-click
+            onTouchEnd={handleTouchEnd}               // FIX 7: mobile double-tap
+          >
+            {/* Remote video — always in DOM so ref is always valid */}
             <video
-  ref={remoteVideoRef}
-  autoPlay
-  playsInline
-  muted={false}
-  controls={false}
-  webkit-playsinline="true"
-  x-webkit-airplay="allow"
-  className="call-remote-video"
-/>
-<video
-  ref={localVideoRef}
-  autoPlay
-  muted
-  playsInline
-  className="call-local-video"
-/>
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              webkit-playsinline="true"
+              x-webkit-airplay="allow"
+              className="call-remote-video"
+              style={{ display: hideRemote ? "none" : "block" }}
+            />
+
+            {/* Local (self-view) video — visible even while outgoing pending */}
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+              webkit-playsinline="true"
+              className="call-local-video"
+            />
+
+            {/* FIX 9: Distinct icons for enter / exit fullscreen */}
+            {call?.status === "active" && (
+              <button
+                className="fullscreen-btn"
+                onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+                title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              >
+                {isFullscreen ? "⊡" : "⛶"}
+              </button>
+            )}
+
+            {/* Unmute fallback — shown if autoplay muted got stuck */}
+            {remoteMuted && call?.status === "active" && (
+              <button className="unmute-badge" onClick={handleUnmute}>
+                🔇 Tap to unmute
+              </button>
+            )}
           </div>
         ) : (
           <div className="call-avatar-wrap">
@@ -232,8 +379,11 @@ useEffect(() => {
         )}
 
         <div className="call-peer-name">{call.peer}</div>
+
         {isPending && isIncoming && (
-          <div className="call-status-text">Incoming {isVideo ? "video" : "voice"} call…</div>
+          <div className="call-status-text">
+            Incoming {isVideo ? "video" : "voice"} call…
+          </div>
         )}
         {isPending && !isIncoming && (
           <div className="call-status-text">Calling…</div>
@@ -241,28 +391,63 @@ useEffect(() => {
         {call.status === "active" && (
           <div className="call-status-text call-timer">{fmt(duration)}</div>
         )}
+
         <div className="call-controls">
           {call.status === "active" && (
             <>
-              <button className={`call-ctrl-btn ${muted ? "off" : ""}`} onClick={toggleMute} title={muted ? "Unmute" : "Mute"}>
+              <button
+                className={`call-ctrl-btn ${muted ? "off" : ""}`}
+                onClick={toggleMute}
+                title={muted ? "Unmute" : "Mute"}
+              >
                 {muted ? "🔇" : "🎤"}
               </button>
+
               {isVideo && (
                 <>
-                  <button className={`call-ctrl-btn ${camOff ? "off" : ""}`} onClick={toggleCam} title={camOff ? "Cam on" : "Cam off"}>
+                  <button
+                    className={`call-ctrl-btn ${camOff ? "off" : ""}`}
+                    onClick={toggleCam}
+                    title={camOff ? "Camera on" : "Camera off"}
+                  >
                     {camOff ? "📷" : "🎥"}
                   </button>
-                  <button className="call-ctrl-btn" onClick={onSwitchCamera} title="Switch camera">
+                  <button
+                    className="call-ctrl-btn"
+                    onClick={onSwitchCamera}
+                    title="Switch camera"
+                  >
                     🔄
+                  </button>
+                  <button
+                    className="call-ctrl-btn"
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  >
+                    {isFullscreen ? "⊡" : "⛶"}
                   </button>
                 </>
               )}
             </>
           )}
+
           {isPending && isIncoming && (
-            <button className="call-ctrl-btn accept" onClick={() => onEnd("accept")} title="Accept">✓</button>
+            <button
+              className="call-ctrl-btn accept"
+              onClick={() => onEnd("accept")}
+              title="Accept call"
+            >
+              ✓
+            </button>
           )}
-          <button className="call-ctrl-btn end" onClick={() => onEnd("end")} title="End">✕</button>
+
+          <button
+            className="call-ctrl-btn end"
+            onClick={() => onEnd("end")}
+            title="End call"
+          >
+            ✕
+          </button>
         </div>
       </div>
     </div>
@@ -273,12 +458,12 @@ useEffect(() => {
 function SettingsPanel({ user, onLogout, onClose, isDark }) {
   const [newUsername, setNewUsername] = useState(user.username);
   const [currentPass, setCurrentPass] = useState("");
-  const [newPass, setNewPass] = useState("");
+  const [newPass,     setNewPass]     = useState("");
   const [confirmPass, setConfirmPass] = useState("");
-  const [msg, setMsg] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [msg,         setMsg]         = useState(null);
+  const [loading,     setLoading]     = useState(false);
   const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
+  const [showNew,     setShowNew]     = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   const showMsg = (type, text) => {
@@ -308,7 +493,10 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
 
   return (
     <div className="settings-overlay" onClick={onClose}>
-      <div className={`settings-panel ${isDark ? "dark" : "light"}`} onClick={e => e.stopPropagation()}>
+      <div
+        className={`settings-panel ${isDark ? "dark" : "light"}`}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="settings-header">
           <div className="settings-title">Settings</div>
           <button className="settings-close" onClick={onClose}>&#x2715;</button>
@@ -326,32 +514,63 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
         <div className="settings-section-label">Account</div>
         <div className="settings-field">
           <label className="settings-label">Username</label>
-          <input className="settings-input" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="New username" />
+          <input
+            className="settings-input"
+            value={newUsername}
+            onChange={e => setNewUsername(e.target.value)}
+            placeholder="New username"
+          />
         </div>
         <div className="settings-section-label" style={{ marginTop: 8 }}>Change Password</div>
         <div className="settings-field">
           <label className="settings-label">Current Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showCurrent ? "text" : "password"} value={currentPass} onChange={e => setCurrentPass(e.target.value)} placeholder="Required to save changes" />
-            <button className="settings-eye" onClick={() => setShowCurrent(!showCurrent)}>{showCurrent ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showCurrent ? "text" : "password"}
+              value={currentPass}
+              onChange={e => setCurrentPass(e.target.value)}
+              placeholder="Required to save changes"
+            />
+            <button className="settings-eye" onClick={() => setShowCurrent(v => !v)}>
+              {showCurrent ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
         <div className="settings-field">
           <label className="settings-label">New Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showNew ? "text" : "password"} value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Leave blank to keep current" />
-            <button className="settings-eye" onClick={() => setShowNew(!showNew)}>{showNew ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showNew ? "text" : "password"}
+              value={newPass}
+              onChange={e => setNewPass(e.target.value)}
+              placeholder="Leave blank to keep current"
+            />
+            <button className="settings-eye" onClick={() => setShowNew(v => !v)}>
+              {showNew ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
         <div className="settings-field">
           <label className="settings-label">Confirm New Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showConfirm ? "text" : "password"} value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Repeat new password" />
-            <button className="settings-eye" onClick={() => setShowConfirm(!showConfirm)}>{showConfirm ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showConfirm ? "text" : "password"}
+              value={confirmPass}
+              onChange={e => setConfirmPass(e.target.value)}
+              placeholder="Repeat new password"
+            />
+            <button className="settings-eye" onClick={() => setShowConfirm(v => !v)}>
+              {showConfirm ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
         {msg && <div className={`settings-msg ${msg.type}`}>{msg.text}</div>}
-        <button className="settings-save-btn" onClick={handleSave} disabled={loading}>{loading ? "Saving..." : "Save Changes"}</button>
+        <button className="settings-save-btn" onClick={handleSave} disabled={loading}>
+          {loading ? "Saving..." : "Save Changes"}
+        </button>
         <div className="settings-divider" />
         <button className="settings-logout-btn" onClick={onLogout}>Logout</button>
       </div>
@@ -361,35 +580,35 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
 
 // ─── MAIN CHAT ────────────────────────────────────────────────────────────────
 function Chat({ user, onLogout, theme, toggleTheme }) {
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState("");
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const [typingUser, setTypingUser] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [activeRoom, setActiveRoom] = useState("general");
-  const [activeRoomName, setActiveRoomName] = useState("General Chat");
-  const [search, setSearch] = useState("");
-  const [attachment, setAttachment] = useState(null);
+  const [messages,          setMessages]          = useState([]);
+  const [text,              setText]              = useState("");
+  const [onlineUsers,       setOnlineUsers]       = useState([]);
+  const [typingUser,        setTypingUser]        = useState("");
+  const [isTyping,          setIsTyping]          = useState(false);
+  const [activeRoom,        setActiveRoom]        = useState("general");
+  const [activeRoomName,    setActiveRoomName]    = useState("General Chat");
+  const [search,            setSearch]            = useState("");
+  const [attachment,        setAttachment]        = useState(null);
   const [attachmentLoading, setAttachmentLoading] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [unreadCounts, setUnreadCounts] = useState({});
-  const [showSettings, setShowSettings] = useState(false);
-  const [lightboxImg, setLightboxImg] = useState(null);
-  const [editingMsg, setEditingMsg] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [hoveredMsg, setHoveredMsg] = useState(null);
-  const [call, setCall] = useState(null);
-  const [facingMode, setFacingMode] = useState("user");
-  const [socketReady, setSocketReady] = useState(false);
+  const [showEmojiPicker,   setShowEmojiPicker]   = useState(false);
+  const [unreadCounts,      setUnreadCounts]      = useState({});
+  const [showSettings,      setShowSettings]      = useState(false);
+  const [lightboxImg,       setLightboxImg]       = useState(null);
+  const [editingMsg,        setEditingMsg]        = useState(null);
+  const [editText,          setEditText]          = useState("");
+  const [hoveredMsg,        setHoveredMsg]        = useState(null);
+  const [call,              setCall]              = useState(null);
+  const [facingMode,        setFacingMode]        = useState("user");
+  const [socketReady,       setSocketReady]       = useState(false);
 
-  const socketRef = useRef(null);
-  const pcRef = useRef(null);
-  const localStreamRef = useRef(null);
+  const socketRef         = useRef(null);
+  const pcRef             = useRef(null);
+  const localStreamRef    = useRef(null);
   const iceCandidateQueue = useRef([]);
-  const activeRoomRef = useRef("general");
-  const bottomRef = useRef(null);
-  const typingTimer = useRef(null);
-  const fileInputRef = useRef(null);
+  const activeRoomRef     = useRef("general");
+  const bottomRef         = useRef(null);
+  const typingTimer       = useRef(null);
+  const fileInputRef      = useRef(null);
 
   const isDark = theme === "dark";
 
@@ -419,49 +638,39 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       pcRef.current.close();
       pcRef.current = null;
     }
-  
+
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
-  
     pc.onicecandidate = (e) => {
       if (e.candidate && socketRef.current)
-        socketRef.current.emit("call_ice", {
-          to: peer,
-          candidate: e.candidate,
-        });
+        socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
     };
-  
+
     pc.oniceconnectionstatechange = () => {
       console.log("ICE state:", pc.iceConnectionState);
+      // If ICE fails, surface it to the user
+      if (pc.iceConnectionState === "failed") {
+        console.error("ICE connection failed");
+      }
     };
-  
+
     pc.ontrack = (e) => {
       console.log("Remote stream received:", e.streams);
-  
       if (e.streams && e.streams[0]) {
         console.log(
           "Remote tracks:",
           e.streams[0].getTracks().map(t => ({
             kind: t.kind,
             enabled: t.enabled,
-            readyState: t.readyState
+            readyState: t.readyState,
           }))
         );
-  
-        const remoteStream = e.streams[0];
-  
         setCall(prev =>
-          prev
-            ? {
-                ...prev,
-                remoteStream,
-                status: "active",
-              }
-            : prev
+          prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev
         );
       }
     };
-  
+
     pcRef.current = pc;
     return pc;
   }, []);
@@ -474,18 +683,26 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       console.log("Got local tracks:", stream.getTracks().map(t => t.kind));
       localStreamRef.current = stream;
       const pc = createPC(peer);
-      for (const track of stream.getTracks()) {
-        pc.addTrack(track, stream);
-      }      const offer = await pc.createOffer();
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socketRef.current.emit("call_offer", { to: peer, from: user.username, type, offer: pc.localDescription });
+      socketRef.current.emit("call_offer", {
+        to: peer,
+        from: user.username,
+        type,
+        offer: pc.localDescription,
+      });
       setCall({ peer, type, direction: "outgoing", status: "pending", stream });
       setFacingMode("user");
     } catch (err) {
       stopLocalStream();
       console.error("startCall error:", err);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        alert(`Microphone${type === "video" ? "/camera" : ""} permission denied.\n\nClick the 🔒 lock icon in the address bar → allow microphone${type === "video" ? " & camera" : ""} → refresh.`);
+        alert(
+          `Microphone${type === "video" ? "/camera" : ""} permission denied.\n\n` +
+          `Tap the 🔒 lock icon in the address bar → allow microphone` +
+          `${type === "video" ? " & camera" : ""} → refresh.`
+        );
       } else if (err.name === "NotFoundError") {
         alert(`No microphone${type === "video" ? "/camera" : ""} found on this device.`);
       } else if (err.name === "NotReadableError") {
@@ -504,9 +721,8 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         console.log("Answer local tracks:", stream.getTracks().map(t => t.kind));
         localStreamRef.current = stream;
         const pc = createPC(call.peer);
-        for (const track of stream.getTracks()) {
-          pc.addTrack(track, stream);
-        }        await pc.setRemoteDescription(new RTCSessionDescription(call._offer));
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        await pc.setRemoteDescription(new RTCSessionDescription(call._offer));
         await flushIceCandidates(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -520,7 +736,8 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         alert("Could not accept call: " + err.message);
       }
     } else {
-      if (socketRef.current && call?.peer) socketRef.current.emit("call_end", { to: call.peer });
+      if (socketRef.current && call?.peer)
+        socketRef.current.emit("call_end", { to: call.peer });
       stopLocalStream();
       setCall(null);
     }
@@ -535,7 +752,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         audio: true,
       });
       const newVideoTrack = newStream.getVideoTracks()[0];
-      const sender = pcRef.current.getSenders().find(s => s.track && s.track.kind === "video");
+      const sender = pcRef.current.getSenders().find(s => s.track?.kind === "video");
       if (sender) await sender.replaceTrack(newVideoTrack);
 
       localStreamRef.current.getVideoTracks().forEach(t => t.stop());
@@ -545,7 +762,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         newVideoTrack,
       ]);
       localStreamRef.current = newMediaStream;
-
       setCall(prev => prev ? { ...prev, stream: newMediaStream } : prev);
       setFacingMode(newFacing);
     } catch (e) {
@@ -554,11 +770,13 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     }
   }, [facingMode]);
 
-  // ── Socket: connection ──────────────────────────────────────────────────────
+  // ── FIX 10: Socket with tuned ping timings for Render.com free tier ─────────
   useEffect(() => {
     const socket = io(BACKEND_URL, {
       transports: ["websocket", "polling"],
       maxHttpBufferSize: 10 * 1024 * 1024,
+      pingInterval: 10000,   // ping every 10s (default 25s — too slow for Render)
+      pingTimeout:  20000,   // wait 20s for pong before disconnecting
     });
     socketRef.current = socket;
 
@@ -577,11 +795,14 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       console.error("Socket connect error:", err.message);
     });
 
+    // Heartbeat to keep Render.com free instance alive
     const interval = setInterval(() => {
       if (socket.connected) socket.emit("user_online", { username: user.username });
     }, 5000);
 
-    socket.on("online_users", (users) => setOnlineUsers(users.filter(u => u !== user.username)));
+    socket.on("online_users", (users) =>
+      setOnlineUsers(users.filter(u => u !== user.username))
+    );
 
     return () => {
       clearInterval(interval);
@@ -607,14 +828,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                 (m.fileData?.name ?? null) === (msg.fileData?.name ?? null)
               )
           );
-          return [
-            ...filtered,
-            {
-              ...msg,
-              time: getTime(),
-              _isLocal: false,
-            },
-          ];
+          return [...filtered, { ...msg, time: getTime(), _isLocal: false }];
         });
       } else if (msg.sender !== user.username) {
         setUnreadCounts(prev => ({
@@ -626,10 +840,14 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
     socket.on("receive_message", handleMessage);
     socket.on("message_edited", (updatedMsg) => {
-      setMessages(prev => prev.map(m => m._id === updatedMsg._id ? { ...updatedMsg, time: m.time } : m));
+      setMessages(prev =>
+        prev.map(m => m._id === updatedMsg._id ? { ...updatedMsg, time: m.time } : m)
+      );
     });
     socket.on("message_deleted", ({ messageId }) => {
-      setMessages(prev => prev.map(m => m._id === messageId ? { ...m, deleted: true, message: "" } : m));
+      setMessages(prev =>
+        prev.map(m => m._id === messageId ? { ...m, deleted: true, message: "" } : m)
+      );
     });
 
     return () => {
@@ -655,9 +873,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
           await flushIceCandidates(pc);
-          // Set active for caller immediately — voice calls may not trigger ontrack
+          // Caller side: voice calls may never fire ontrack, so force active here
           setCall(prev => prev ? { ...prev, status: "active" } : prev);
-        } catch (e) { console.error("set answer error:", e); }
+        } catch (e) {
+          console.error("set answer error:", e);
+        }
       }
     });
 
@@ -671,7 +891,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       catch (e) { console.warn("ICE add error:", e); }
     });
 
-    socket.on("call_end", () => { stopLocalStream(); setCall(null); });
+    socket.on("call_end", () => {
+      stopLocalStream();
+      setCall(null);
+    });
 
     return () => {
       socket.off("call_offer");
@@ -695,7 +918,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socket.on("chat_history", (history) => {
       setMessages(history.map(m => ({
         ...m,
-        time: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: new Date(m.createdAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
       })));
     });
     socket.on("user_typing", ({ username }) => {
@@ -754,8 +980,13 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         const MAX_DIM = 1200;
         let { width, height } = img;
         if (width > MAX_DIM || height > MAX_DIM) {
-          if (width > height) { height = Math.round((height * MAX_DIM) / width); width = MAX_DIM; }
-          else { width = Math.round((width * MAX_DIM) / height); height = MAX_DIM; }
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
         }
         const canvas = document.createElement("canvas");
         canvas.width = width;
@@ -775,10 +1006,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     } else {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        setAttachment({ name: file.name, size: file.size, type: file.type, dataUrl: ev.target.result, isImage: false });
+        setAttachment({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          dataUrl: ev.target.result,
+          isImage: false,
+        });
         setAttachmentLoading(false);
       };
-      reader.onerror = () => { alert("Failed to read file."); setAttachmentLoading(false); };
+      reader.onerror = () => {
+        alert("Failed to read file.");
+        setAttachmentLoading(false);
+      };
       reader.readAsDataURL(file);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -826,7 +1066,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     setText("");
     setAttachment(null);
     setShowEmojiPicker(false);
-
     socketRef.current.emit("send_message", msgData);
   };
 
@@ -834,7 +1073,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const submitEdit = () => {
     if (!editText.trim()) return;
-    socketRef.current.emit("edit_message", { messageId: editingMsg, newMessage: editText.trim(), room: activeRoom });
+    socketRef.current.emit("edit_message", {
+      messageId: editingMsg,
+      newMessage: editText.trim(),
+      room: activeRoom,
+    });
     setEditingMsg(null);
     setEditText("");
   };
@@ -844,7 +1087,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socketRef.current.emit("delete_message", { messageId: msgId, room: activeRoom });
   };
 
-  const filteredUsers = onlineUsers.filter(u => u.toLowerCase().includes(search.toLowerCase()));
+  const filteredUsers = onlineUsers.filter(u =>
+    u.toLowerCase().includes(search.toLowerCase())
+  );
   const showGeneral = "general chat".includes(search.toLowerCase()) || search === "";
 
   return (
@@ -859,22 +1104,41 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         )}
 
         {call && (
-          <CallOverlay call={call} user={user} onEnd={handleCallEnd} isDark={isDark} onSwitchCamera={handleSwitchCamera} />
+          <CallOverlay
+            call={call}
+            user={user}
+            onEnd={handleCallEnd}
+            isDark={isDark}
+            onSwitchCamera={handleSwitchCamera}
+          />
         )}
 
         {showSettings && (
-          <SettingsPanel user={user} onLogout={onLogout} onClose={() => setShowSettings(false)} isDark={isDark} />
+          <SettingsPanel
+            user={user}
+            onLogout={onLogout}
+            onClose={() => setShowSettings(false)}
+            isDark={isDark}
+          />
         )}
 
-        {/* Sidebar */}
+        {/* ── Sidebar ───────────────────────────────────────────────────────── */}
         <div className="sidebar">
           <div className="sidebar-header">
             <div className="brand-logo">💬</div>
             <span className="brand-label">ChatApp</span>
-            <button className="icon-btn theme-btn" onClick={toggleTheme} title={isDark ? "Light mode" : "Dark mode"}>
+            <button
+              className="icon-btn theme-btn"
+              onClick={toggleTheme}
+              title={isDark ? "Light mode" : "Dark mode"}
+            >
               {isDark ? "☀️" : "🌙"}
             </button>
-            <button className="icon-btn settings-btn" onClick={() => setShowSettings(true)} title="Settings">
+            <button
+              className="icon-btn settings-btn"
+              onClick={() => setShowSettings(true)}
+              title="Settings"
+            >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -894,69 +1158,113 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
           <div className="search-wrap">
             <span className="search-ico">🔍</span>
-            <input className="search-inp" placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} />
-            {search && <button className="search-clear" onClick={() => setSearch("")}>✕</button>}
+            <input
+              className="search-inp"
+              placeholder="Search users..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className="search-clear" onClick={() => setSearch("")}>✕</button>
+            )}
           </div>
 
           <div className="sidebar-scroll">
             {showGeneral && (
               <>
                 <div className="section-lbl">Rooms</div>
-                <div className={`contact ${activeRoom === "general" ? "active" : ""}`} onClick={() => switchRoom("general", "General Chat")}>
-                  <div className="contact-av" style={{ background: "linear-gradient(135deg,#6c63ff,#9b8fff)", fontSize: 18, width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>💬</div>
+                <div
+                  className={`contact ${activeRoom === "general" ? "active" : ""}`}
+                  onClick={() => switchRoom("general", "General Chat")}
+                >
+                  <div className="contact-av" style={{
+                    background: "linear-gradient(135deg,#6c63ff,#9b8fff)",
+                    fontSize: 18, width: 40, height: 40,
+                    borderRadius: "50%", display: "flex",
+                    alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>💬</div>
                   <div className="contact-info">
                     <div className="contact-name">General Chat</div>
                     <div className="contact-last">Everyone can chat here</div>
                   </div>
-                  {unreadCounts["general"] > 0 && <div className="unread-badge">{unreadCounts["general"]}</div>}
+                  {unreadCounts["general"] > 0 && (
+                    <div className="unread-badge">{unreadCounts["general"]}</div>
+                  )}
                 </div>
               </>
             )}
 
             <div className="section-lbl">Online — {filteredUsers.length}</div>
-            {filteredUsers.length === 0 && search === "" && <div className="empty-users">No other users online</div>}
-            {filteredUsers.length === 0 && search !== "" && <div className="empty-users">No results for "{search}"</div>}
+            {filteredUsers.length === 0 && search === "" && (
+              <div className="empty-users">No other users online</div>
+            )}
+            {filteredUsers.length === 0 && search !== "" && (
+              <div className="empty-users">No results for "{search}"</div>
+            )}
 
             {filteredUsers.map((u, i) => {
               const roomId = getRoomId(user.username, u);
               return (
-                <div key={i} className={`contact ${activeRoom === roomId ? "active" : ""}`} onClick={() => switchRoom(roomId, u)}>
+                <div
+                  key={i}
+                  className={`contact ${activeRoom === roomId ? "active" : ""}`}
+                  onClick={() => switchRoom(roomId, u)}
+                >
                   <div className="contact-av-wrap">
-                    <div className="contact-av" style={{ background: getColor(u) }}>{u[0].toUpperCase()}</div>
+                    <div className="contact-av" style={{ background: getColor(u) }}>
+                      {u[0].toUpperCase()}
+                    </div>
                     <span className="online-badge" />
                   </div>
                   <div className="contact-info">
                     <div className="contact-name">{u}</div>
                     <div className="contact-last online-text">Online</div>
                   </div>
-                  {unreadCounts[roomId] > 0 && <div className="unread-badge">{unreadCounts[roomId]}</div>}
+                  {unreadCounts[roomId] > 0 && (
+                    <div className="unread-badge">{unreadCounts[roomId]}</div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Main chat */}
+        {/* ── Main chat ─────────────────────────────────────────────────────── */}
         <div className="chat-main">
           <div className="chat-header">
-            <div className="ch-av" style={{ background: activeRoom === "general" ? "linear-gradient(135deg,#6c63ff,#9b8fff)" : getColor(activeRoomName), fontSize: activeRoom === "general" ? 20 : 16 }}>
+            <div className="ch-av" style={{
+              background: activeRoom === "general"
+                ? "linear-gradient(135deg,#6c63ff,#9b8fff)"
+                : getColor(activeRoomName),
+              fontSize: activeRoom === "general" ? 20 : 16,
+            }}>
               {activeRoom === "general" ? "💬" : activeRoomName[0].toUpperCase()}
             </div>
             <div className="ch-info">
               <div className="ch-name">{activeRoomName}</div>
               <div className="ch-status">
                 <span className="online-dot" />
-                {activeRoom === "general" ? `${onlineUsers.length + 1} members online` : "Private · End-to-end encrypted"}
+                {activeRoom === "general"
+                  ? `${onlineUsers.length + 1} members online`
+                  : "Private · End-to-end encrypted"}
               </div>
             </div>
             {activeRoom !== "general" && (
               <div className="ch-actions">
-                <button className="call-icon-btn voice" onClick={() => startCall(activeRoomName, "voice")} title="Voice call">
+                <button
+                  className="call-icon-btn voice"
+                  onClick={() => startCall(activeRoomName, "voice")}
+                  title="Voice call"
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.21 6.21l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
                   </svg>
                 </button>
-                <button className="call-icon-btn video" onClick={() => startCall(activeRoomName, "video")} title="Video call">
+                <button
+                  className="call-icon-btn video"
+                  onClick={() => startCall(activeRoomName, "video")}
+                  title="Video call"
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polygon points="23 7 16 12 23 17 23 7" />
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
@@ -970,33 +1278,55 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             {messages.length === 0 && (
               <div className="empty-chat">
                 <div className="empty-icon">{activeRoom === "general" ? "💬" : "🔒"}</div>
-                <p className="empty-title">{activeRoom === "general" ? "Welcome to General Chat!" : `Private chat with ${activeRoomName}`}</p>
+                <p className="empty-title">
+                  {activeRoom === "general"
+                    ? "Welcome to General Chat!"
+                    : `Private chat with ${activeRoomName}`}
+                </p>
                 <p className="empty-sub">Be the first to say hello</p>
               </div>
             )}
 
             {messages.map((msg, i) => {
-              const mine = msg.sender === user.username;
-              const showName = i === 0 || messages[i - 1]?.sender !== msg.sender;
-              const showAv = i === messages.length - 1 || messages[i + 1]?.sender !== msg.sender;
+              const mine      = msg.sender === user.username;
+              const showName  = i === 0 || messages[i - 1]?.sender !== msg.sender;
+              const showAv    = i === messages.length - 1 || messages[i + 1]?.sender !== msg.sender;
               const isDeleted = msg.deleted;
               const isEditing = editingMsg === msg._id;
 
               return (
-                <div key={msg._id || i} className={`msg-row ${mine ? "mine" : ""}`} onMouseEnter={() => setHoveredMsg(msg._id)} onMouseLeave={() => setHoveredMsg(null)}>
+                <div
+                  key={msg._id || i}
+                  className={`msg-row ${mine ? "mine" : ""}`}
+                  onMouseEnter={() => setHoveredMsg(msg._id)}
+                  onMouseLeave={() => setHoveredMsg(null)}
+                >
                   {!mine && (
-                    <div className="msg-av" style={{ background: getColor(msg.sender), opacity: showAv ? 1 : 0 }}>
+                    <div
+                      className="msg-av"
+                      style={{ background: getColor(msg.sender), opacity: showAv ? 1 : 0 }}
+                    >
                       {msg.sender[0].toUpperCase()}
                     </div>
                   )}
                   <div className="bwrap">
                     {!mine && showName && !isDeleted && (
-                      <div className="bsender" style={{ color: getColor(msg.sender) }}>{msg.sender}</div>
+                      <div className="bsender" style={{ color: getColor(msg.sender) }}>
+                        {msg.sender}
+                      </div>
                     )}
                     {isEditing ? (
                       <div className="edit-wrap">
-                        <input className="edit-input" value={editText} onChange={e => setEditText(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter") submitEdit(); if (e.key === "Escape") setEditingMsg(null); }} autoFocus />
+                        <input
+                          className="edit-input"
+                          value={editText}
+                          onChange={e => setEditText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") submitEdit();
+                            if (e.key === "Escape") setEditingMsg(null);
+                          }}
+                          autoFocus
+                        />
                         <div className="edit-actions">
                           <button className="edit-save" onClick={submitEdit}>Save</button>
                           <button className="edit-cancel" onClick={() => setEditingMsg(null)}>Cancel</button>
@@ -1009,10 +1339,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                         ) : (
                           <>
                             {msg.fileData?.isImage && (
-                              <img src={msg.fileData.data} alt={msg.fileData.name} className="bubble-img clickable" onClick={() => setLightboxImg(msg.fileData.data)} />
+                              <img
+                                src={msg.fileData.data}
+                                alt={msg.fileData.name}
+                                className="bubble-img clickable"
+                                onClick={() => setLightboxImg(msg.fileData.data)}
+                              />
                             )}
                             {msg.fileData && !msg.fileData.isImage && (
-                              <a href={msg.fileData.data} download={msg.fileData.name} className="file-download-link">
+                              <a
+                                href={msg.fileData.data}
+                                download={msg.fileData.name}
+                                className="file-download-link"
+                              >
                                 <div className="file-card">
                                   <span className="file-card-icon">📄</span>
                                   <div className="file-card-info">
@@ -1024,7 +1363,12 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                               </a>
                             )}
                             {msg.image && !msg.fileData && (
-                              <img src={msg.image} alt="attachment" className="bubble-img clickable" onClick={() => setLightboxImg(msg.image)} />
+                              <img
+                                src={msg.image}
+                                alt="attachment"
+                                className="bubble-img clickable"
+                                onClick={() => setLightboxImg(msg.image)}
+                              />
                             )}
                             {msg.message && <span className="btext">{msg.message}</span>}
                             {msg.edited && <span className="edited-tag">edited</span>}
@@ -1036,9 +1380,17 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                     {mine && !isDeleted && !isEditing && hoveredMsg === msg._id && !msg._isLocal && (
                       <div className="msg-actions mine">
                         {msg.message && !msg.fileData && (
-                          <button className="msg-action-btn edit" onClick={() => startEdit(msg)} title="Edit">✏️</button>
+                          <button
+                            className="msg-action-btn edit"
+                            onClick={() => startEdit(msg)}
+                            title="Edit"
+                          >✏️</button>
                         )}
-                        <button className="msg-action-btn delete" onClick={() => deleteMessage(msg._id)} title="Delete">🗑️</button>
+                        <button
+                          className="msg-action-btn delete"
+                          onClick={() => deleteMessage(msg._id)}
+                          title="Delete"
+                        >🗑️</button>
                       </div>
                     )}
                   </div>
@@ -1053,7 +1405,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
             {isTyping && (
               <div className="msg-row">
-                <div className="msg-av" style={{ background: getColor(typingUser) }}>{typingUser[0]?.toUpperCase()}</div>
+                <div className="msg-av" style={{ background: getColor(typingUser) }}>
+                  {typingUser[0]?.toUpperCase()}
+                </div>
                 <div className="bubble theirs typing-bubble">
                   <span className="tdot" /><span className="tdot" /><span className="tdot" />
                 </div>
@@ -1064,7 +1418,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
           {attachmentLoading && (
             <div className="attach-preview">
-              <div className="attach-file-preview"><span>⏳</span><div><div className="attach-fname">Processing…</div></div></div>
+              <div className="attach-file-preview">
+                <span>⏳</span>
+                <div><div className="attach-fname">Processing…</div></div>
+              </div>
             </div>
           )}
 
@@ -1090,15 +1447,36 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           )}
 
           <div className="input-area">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: "none" }}
-              accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.zip,.mp4,.mp3" />
-            <button className="input-icon-btn" title="Attach file" onClick={() => fileInputRef.current?.click()}>📎</button>
-            <button className={`input-icon-btn ${showEmojiPicker ? "active" : ""}`} title="Emoji"
-              onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(v => !v); }}>😊</button>
-            <textarea className="msg-input" placeholder={`Message ${activeRoomName}...`} value={text}
-              onChange={handleTyping} onKeyDown={handleKey} rows={1} />
-            <button className={`send-btn ${(text.trim() || attachment) ? "ready" : ""}`}
-              onClick={sendMessage} disabled={(!text.trim() && !attachment) || attachmentLoading}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              style={{ display: "none" }}
+              accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.zip,.mp4,.mp3"
+            />
+            <button
+              className="input-icon-btn"
+              title="Attach file"
+              onClick={() => fileInputRef.current?.click()}
+            >📎</button>
+            <button
+              className={`input-icon-btn ${showEmojiPicker ? "active" : ""}`}
+              title="Emoji"
+              onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(v => !v); }}
+            >😊</button>
+            <textarea
+              className="msg-input"
+              placeholder={`Message ${activeRoomName}...`}
+              value={text}
+              onChange={handleTyping}
+              onKeyDown={handleKey}
+              rows={1}
+            />
+            <button
+              className={`send-btn ${(text.trim() || attachment) ? "ready" : ""}`}
+              onClick={sendMessage}
+              disabled={(!text.trim() && !attachment) || attachmentLoading}
+            >
               &#x27A4;
             </button>
           </div>
