@@ -3,7 +3,6 @@ import { io } from "socket.io-client";
 import axios from "axios";
 import "./Chat.css";
 
-
 const COLORS = ["#6c63ff","#f78166","#3fb950","#d2a8ff","#ffa657","#79c0ff","#ff7b72","#43e8d8"];
 
 function getColor(name) {
@@ -27,6 +26,33 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+// ─── ICE / TURN CONFIG ───────────────────────────────────────────────────────
+// Replace username/credential with your free Metered.ca credentials:
+// Sign up at https://www.metered.ca/tools/openrelay
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun.relay.metered.ca:80" },
+    {
+      urls: "turn:global.relay.metered.ca:80",
+      username: "8183412731114fe26f75c0cd",
+      credential: "SmXUVvFxV76lTYN6",
+    },
+    {
+      urls: "turn:global.relay.metered.ca:443",
+      username: "8183412731114fe26f75c0cd",
+      credential: "SmXUVvFxV76lTYN6",
+    },
+    {
+      urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      username: "8183412731114fe26f75c0cd",
+      credential: "SmXUVvFxV76lTYN6",
+    },
+  ],
+};
+
+// ─── CALL OVERLAY ─────────────────────────────────────────────────────────────
 function CallOverlay({ call, user, onEnd, isDark }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -35,13 +61,15 @@ function CallOverlay({ call, user, onEnd, isDark }) {
   const [camOff, setCamOff] = useState(false);
 
   useEffect(() => {
-    if (call.stream && localVideoRef.current)
+    if (call.stream && localVideoRef.current) {
       localVideoRef.current.srcObject = call.stream;
+    }
   }, [call.stream]);
 
   useEffect(() => {
-    if (call.remoteStream && remoteVideoRef.current)
+    if (call.remoteStream && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = call.remoteStream;
+    }
   }, [call.remoteStream]);
 
   useEffect(() => {
@@ -142,6 +170,7 @@ function CallOverlay({ call, user, onEnd, isDark }) {
   );
 }
 
+// ─── SETTINGS PANEL ───────────────────────────────────────────────────────────
 function SettingsPanel({ user, onLogout, onClose, isDark }) {
   const [newUsername, setNewUsername] = useState(user.username);
   const [currentPass, setCurrentPass] = useState("");
@@ -277,6 +306,7 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
   );
 }
 
+// ─── MAIN CHAT COMPONENT ──────────────────────────────────────────────────────
 function Chat({ user, onLogout, theme, toggleTheme }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -296,10 +326,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [hoveredMsg, setHoveredMsg] = useState(null);
   const [call, setCall] = useState(null);
 
-  // ✅ FIX: socket is now a ref, created per user session inside the component
   const socketRef = useRef(null);
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
+  // ✅ FIX 1: Queue ICE candidates that arrive before remoteDescription is set
+  const iceCandidateQueue = useRef([]);
   const activeRoomRef = useRef("general");
   const bottomRef = useRef(null);
   const typingTimer = useRef(null);
@@ -308,29 +339,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const EMOJIS = ["😀","😂","🔥","❤️","👍","🎉","😎","🤔","💯","🚀","😊","🙌","✨","😅","🤣","💪","🥳","😍","🤩","👏"];
   const isDark = theme === "dark";
 
-  const ICE_SERVERS = {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      {
-        urls: "turn:openrelay.metered.ca:80",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-      },
-      {
-        urls: "turn:openrelay.metered.ca:443",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-      },
-      {
-        urls: "turn:openrelay.metered.ca:443?transport=tcp",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-      },
-    ],
-  };
+  // ─── HELPERS ──────────────────────────────────────────────────────────────
 
-  const stopLocalStream = () => {
+  const stopLocalStream = useCallback(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
@@ -339,73 +350,196 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       pcRef.current.close();
       pcRef.current = null;
     }
-  };
+    iceCandidateQueue.current = [];
+  }, []);
 
+  // ✅ FIX 2: Flush queued ICE candidates after remoteDescription is set
+  const flushIceCandidates = useCallback(async (pc) => {
+    console.log(`Flushing ${iceCandidateQueue.current.length} queued ICE candidates`);
+    for (const candidate of iceCandidateQueue.current) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn("ICE flush error:", e);
+      }
+    }
+    iceCandidateQueue.current = [];
+  }, []);
+
+  // ✅ FIX 3: Proper PC creation with ICE state logging and restartIce on failure
   const createPC = useCallback((peer) => {
+    // Close any existing PC first
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+
     const pc = new RTCPeerConnection(ICE_SERVERS);
+
     pc.onicecandidate = (e) => {
-      if (e.candidate) socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
+      if (e.candidate && socketRef.current) {
+        console.log("Sending ICE candidate to", peer);
+        socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
+      } else if (!e.candidate) {
+        console.log("ICE gathering complete");
+      }
     };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE connection state:", pc.iceConnectionState);
+      if (pc.iceConnectionState === "failed") {
+        console.warn("ICE failed — attempting restartIce");
+        try { pc.restartIce(); } catch (e) { console.error("restartIce error:", e); }
+      }
+      if (pc.iceConnectionState === "disconnected") {
+        console.warn("ICE disconnected");
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("PC connection state:", pc.connectionState);
+    };
+
+    // ✅ FIX 4: ontrack fires when remote media arrives — set active here
     pc.ontrack = (e) => {
-      setCall(prev => prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev);
+      console.log("Remote track received:", e.track.kind, e.streams);
+      if (e.streams && e.streams[0]) {
+        setCall(prev =>
+          prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev
+        );
+      }
     };
+
     pcRef.current = pc;
     return pc;
   }, []);
 
-  const startCall = async (peer, type) => {
+  // ─── START CALL (caller side) ─────────────────────────────────────────────
+  const startCall = useCallback(async (peer, type) => {
     if (call) return;
+    iceCandidateQueue.current = [];
+
     try {
       const constraints = type === "video"
-        ? { audio: true, video: true }
+        ? { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } }
         : { audio: true, video: false };
+
+      console.log("Requesting media with constraints:", constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("Got local stream, tracks:", stream.getTracks().map(t => t.kind));
+
       localStreamRef.current = stream;
       const pc = createPC(peer);
-      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+      stream.getTracks().forEach(t => {
+        console.log("Adding track to PC:", t.kind);
+        pc.addTrack(t, stream);
+      });
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socketRef.current.emit("call_offer", { to: peer, from: user.username, type, offer });
+      console.log("Offer created and set as local description");
+
+      socketRef.current.emit("call_offer", {
+        to: peer,
+        from: user.username,
+        type,
+        offer: pc.localDescription,
+      });
+
       setCall({ peer, type, direction: "outgoing", status: "pending", stream });
     } catch (err) {
-      alert("Could not access microphone/camera. Please allow permissions and try again.");
-      console.error("Call error:", err);
+      console.error("startCall error:", err.name, err.message);
+      stopLocalStream();
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        alert(
+          "🎤 Permission denied!\n\n" +
+          "Please allow microphone" + (type === "video" ? " and camera" : "") + " access:\n" +
+          "• Click the 🔒 lock icon in your browser address bar\n" +
+          "• Set Microphone" + (type === "video" ? " and Camera" : "") + " to 'Allow'\n" +
+          "• Refresh the page and try again"
+        );
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        alert(
+          "No " + (type === "video" ? "camera/microphone" : "microphone") + " found!\n\n" +
+          "Please connect a device and try again."
+        );
+      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+        alert(
+          "Your " + (type === "video" ? "camera/microphone" : "microphone") + " is being used by another app.\n\n" +
+          "Please close other apps using it and try again."
+        );
+      } else {
+        alert("Could not start call: " + err.message);
+      }
     }
-  };
+  }, [call, createPC, stopLocalStream, user.username]);
 
-  const handleCallEnd = async (action) => {
+  // ─── HANDLE CALL ACTIONS (accept / end) ──────────────────────────────────
+  const handleCallEnd = useCallback(async (action) => {
     if (action === "accept" && call) {
+      iceCandidateQueue.current = [];
       try {
         const constraints = call.type === "video"
-          ? { audio: true, video: true }
+          ? { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } }
           : { audio: true, video: false };
+
+        console.log("Accepting call, requesting media:", constraints);
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Got local stream for answer, tracks:", stream.getTracks().map(t => t.kind));
+
         localStreamRef.current = stream;
         const pc = createPC(call.peer);
-        stream.getTracks().forEach(t => pc.addTrack(t, stream));
-        await pc.setRemoteDescription(call._offer);
+
+        stream.getTracks().forEach(t => {
+          console.log("Adding track to PC (answer):", t.kind);
+          pc.addTrack(t, stream);
+        });
+
+        // ✅ FIX 5: setRemoteDescription BEFORE creating answer, then flush queued ICE
+        console.log("Setting remote description (offer)");
+        await pc.setRemoteDescription(new RTCSessionDescription(call._offer));
+        await flushIceCandidates(pc);
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socketRef.current.emit("call_answer", { to: call.peer, answer });
+        console.log("Answer created and set as local description");
+
+        socketRef.current.emit("call_answer", {
+          to: call.peer,
+          answer: pc.localDescription,
+        });
+
         setCall(prev => ({ ...prev, stream, status: "active" }));
       } catch (err) {
-        alert("Could not access microphone/camera. Please allow permissions.");
+        console.error("Accept call error:", err.name, err.message);
         stopLocalStream();
         setCall(null);
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          alert(
+            "🎤 Permission denied!\n\n" +
+            "Please allow microphone" + (call.type === "video" ? " and camera" : "") + " access in your browser settings."
+          );
+        } else {
+          alert("Could not accept call: " + err.message);
+        }
       }
     } else {
-      socketRef.current.emit("call_end", { to: call?.peer });
+      // End / reject
+      if (socketRef.current && call?.peer) {
+        socketRef.current.emit("call_end", { to: call.peer });
+      }
       stopLocalStream();
       setCall(null);
     }
-  };
+  }, [call, createPC, flushIceCandidates, stopLocalStream]);
 
-  // ✅ FIX: Create a fresh socket per user login, disconnect on logout/unmount
+  // ─── SOCKET: CONNECTION ───────────────────────────────────────────────────
   useEffect(() => {
     const socket = io("https://chatapp-16sp.onrender.com", {
       transports: ["websocket", "polling"],
     });
-        socketRef.current = socket;
+    socketRef.current = socket;
 
     socket.emit("user_online", { username: user.username });
     const interval = setInterval(() => {
@@ -422,7 +556,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username]);
 
-  // ✅ Messages listeners
+  // ─── SOCKET: MESSAGES ─────────────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
@@ -459,26 +593,58 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username]);
 
-  // ✅ Call listeners
+  // ─── SOCKET: CALL SIGNALING ───────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
 
+    // Incoming call offer
     socket.on("call_offer", ({ from, type, offer }) => {
+      console.log("Incoming call from", from, "type:", type);
+      iceCandidateQueue.current = [];
       setCall({ peer: from, type, direction: "incoming", status: "pending", _offer: offer });
     });
+
+    // Caller receives answer from callee
     socket.on("call_answer", async ({ answer }) => {
-      if (pcRef.current) {
-        await pcRef.current.setRemoteDescription(answer);
-        setCall(prev => prev ? { ...prev, status: "active" } : prev);
+      console.log("Received call answer");
+      const pc = pcRef.current;
+      if (pc) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log("Remote description (answer) set on caller");
+          // ✅ FIX 6: Flush queued ICE candidates on caller side too
+          await flushIceCandidates(pc);
+          // Don't set "active" here — wait for ontrack to fire
+        } catch (e) {
+          console.error("setRemoteDescription (answer) error:", e);
+        }
       }
     });
+
+    // ✅ FIX 7: Queue ICE candidates if remoteDescription not yet set
     socket.on("call_ice", async ({ candidate }) => {
-      if (pcRef.current) {
-        try { await pcRef.current.addIceCandidate(candidate); } catch (e) {}
+      const pc = pcRef.current;
+      if (!pc) {
+        console.log("No PC yet, queuing ICE candidate");
+        iceCandidateQueue.current.push(candidate);
+        return;
+      }
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        console.log("No remoteDescription yet, queuing ICE candidate");
+        iceCandidateQueue.current.push(candidate);
+        return;
+      }
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log("ICE candidate added successfully");
+      } catch (e) {
+        console.warn("addIceCandidate error:", e);
       }
     });
+
     socket.on("call_end", () => {
+      console.log("Call ended by remote peer");
       stopLocalStream();
       setCall(null);
     });
@@ -489,9 +655,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       socket.off("call_ice");
       socket.off("call_end");
     };
-  }, []);
+  }, [flushIceCandidates, stopLocalStream]);
 
-  // ✅ Room switching
+  // ─── SOCKET: ROOM SWITCHING ───────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
@@ -527,10 +693,12 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     });
   }, [activeRoom, user.username]);
 
+  // ─── AUTO SCROLL ──────────────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
+  // ─── ROOM / MESSAGE ACTIONS ───────────────────────────────────────────────
   const switchRoom = (roomId, roomName) => {
     setActiveRoom(roomId);
     setActiveRoomName(roomName);
@@ -624,6 +792,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socketRef.current.emit("delete_message", { messageId: msgId, room: activeRoom });
   };
 
+  // ─── RENDER ───────────────────────────────────────────────────────────────
   const filteredUsers = onlineUsers.filter(u =>
     u.toLowerCase().includes(search.toLowerCase())
   );
@@ -653,7 +822,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           />
         )}
 
-        {/* Sidebar */}
+        {/* ── Sidebar ── */}
         <div className="sidebar">
           <div className="sidebar-header">
             <div className="brand-logo">💬</div>
@@ -763,7 +932,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           </div>
         </div>
 
-        {/* Main Chat */}
+        {/* ── Main Chat ── */}
         <div className="chat-main">
           <div className="chat-header">
             <div
