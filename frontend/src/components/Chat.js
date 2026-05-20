@@ -141,6 +141,10 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
   const panelRef       = useRef(null); // ← fullscreen target is the PANEL, not backdrop
+  // Tracks whether remote video has already been successfully played once.
+  // Prevents the "re-mute on every state update" bug where the useEffect
+  // re-runs because ontrack keeps firing with the same stream object.
+  const hasPlayedRemoteRef = useRef(false);
 
   const [duration,     setDuration]     = useState(0);
   const [muted,        setMuted]        = useState(false);
@@ -148,8 +152,9 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [remoteMuted,  setRemoteMuted]  = useState(true);
 
-  // Reset remoteMuted whenever a new call starts
+  // Reset state and hasPlayedRemoteRef whenever a brand-new call starts
   useEffect(() => {
+    hasPlayedRemoteRef.current = false;
     setRemoteMuted(true);
     setDuration(0);
     setMuted(false);
@@ -172,6 +177,16 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     const video = remoteVideoRef.current;
     if (!video || !call?.remoteStream) return;
 
+    // KEY FIX: if we've already successfully played this stream, do NOT
+    // re-run the muted→unmute sequence. Just ensure srcObject is set and return.
+    // This stops the "re-mute on every ontrack/state-update" bug on mobile.
+    if (hasPlayedRemoteRef.current) {
+      if (video.srcObject !== call.remoteStream) {
+        video.srcObject = call.remoteStream;
+      }
+      return;
+    }
+
     video.srcObject = call.remoteStream;
     video.setAttribute("playsinline", "true");
     video.setAttribute("webkit-playsinline", "true");
@@ -181,21 +196,22 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
         video.muted = true;
         setRemoteMuted(true);
         await video.play();
-        // Unmute right after successful play
+        // Mark as played BEFORE unmuting so a re-render doesn't re-trigger
+        hasPlayedRemoteRef.current = true;
         video.muted = false;
         setRemoteMuted(false);
       } catch (err) {
         console.error("Remote play error:", err);
-        // Retry once after short delay (Android timing)
         setTimeout(async () => {
           try {
             video.muted = true;
             await video.play();
+            hasPlayedRemoteRef.current = true;
             video.muted = false;
             setRemoteMuted(false);
           } catch (e) {
             console.error("Remote play retry failed:", e);
-            // Leave the unmute badge visible so user can tap
+            // unmute badge stays visible — user taps to unmute
           }
         }, 800);
       }
@@ -207,7 +223,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
       video.onloadedmetadata = tryPlay;
     }
 
-    // FIX 2: Resume video when user comes back to the tab (iOS Safari pauses it)
+    // FIX 2: Resume video when user returns to tab (iOS Safari pauses on hide)
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && video.paused) {
         video.play().catch(() => {});
@@ -604,6 +620,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const socketRef         = useRef(null);
   const pcRef             = useRef(null);
   const localStreamRef    = useRef(null);
+  const remoteStreamRef   = useRef(null); // stable ref — avoids re-triggering video useEffect
   const iceCandidateQueue = useRef([]);
   const activeRoomRef     = useRef("general");
   const bottomRef         = useRef(null);
@@ -622,6 +639,8 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       pcRef.current.close();
       pcRef.current = null;
     }
+    // Clear the remote stream ref so the next call starts fresh
+    remoteStreamRef.current = null;
     iceCandidateQueue.current = [];
   }, []);
 
@@ -655,20 +674,31 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
 
     pc.ontrack = (e) => {
-      console.log("Remote stream received:", e.streams);
-      if (e.streams && e.streams[0]) {
-        console.log(
-          "Remote tracks:",
-          e.streams[0].getTracks().map(t => ({
-            kind: t.kind,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          }))
-        );
-        setCall(prev =>
-          prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev
-        );
+      console.log("ontrack fired, track:", e.track?.kind);
+
+      // Reuse the SAME MediaStream object reference on every ontrack event.
+      // This keeps call.remoteStream reference stable, so CallOverlay's
+      // useEffect [call?.remoteStream] does NOT re-fire after the first
+      // attach — fixing the "re-mute on every track arrival" bug on mobile.
+      if (!remoteStreamRef.current) {
+        remoteStreamRef.current = new MediaStream();
       }
+
+      const alreadyHasTrack = remoteStreamRef.current
+        .getTracks()
+        .some(t => t.id === e.track.id);
+
+      if (!alreadyHasTrack) {
+        remoteStreamRef.current.addTrack(e.track);
+        console.log("Added track:", e.track.kind,
+          "| total:", remoteStreamRef.current.getTracks().length);
+      }
+
+      setCall(prev =>
+        prev
+          ? { ...prev, remoteStream: remoteStreamRef.current, status: "active" }
+          : prev
+      );
     };
 
     pcRef.current = pc;
