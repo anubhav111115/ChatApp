@@ -514,19 +514,37 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   // ── Socket: messages ────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
-    if (!socket) return;
+if (!socket) return;
 
-    const handleMessage = (msg) => {
-      if (msg.room === activeRoomRef.current) {
-        setMessages(prev => {
-          // Remove optimistic local message, add server confirmed one
-          const filtered = prev.filter(m => !m._isLocal);
-          return [...filtered, { ...msg, time: getTime() }];
-        });
-      } else if (msg.sender !== user.username) {
-        setUnreadCounts(prev => ({ ...prev, [msg.room]: (prev[msg.room] || 0) + 1 }));
-      }
-    };
+const handleMessage = (msg) => {
+  if (msg.room === activeRoomRef.current) {
+    setMessages(prev => {
+      // Remove matching optimistic message
+      const filtered = prev.filter(
+        m =>
+          !(
+            m._isLocal &&
+            m.sender === msg.sender &&
+            m.message === msg.message
+          )
+      );
+
+      return [
+        ...filtered,
+        {
+          ...msg,
+          time: getTime(),
+          _isLocal: false,
+        },
+      ];
+    });
+  } else if (msg.sender !== user.username) {
+    setUnreadCounts(prev => ({
+      ...prev,
+      [msg.room]: (prev[msg.room] || 0) + 1,
+    }));
+  }
+};
 
     socket.on("receive_message", handleMessage);
     socket.on("message_edited", (updatedMsg) => {
