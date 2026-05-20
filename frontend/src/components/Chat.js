@@ -391,34 +391,60 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   }, []);
 
   const createPC = useCallback((peer) => {
-    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+  
     const pc = new RTCPeerConnection(ICE_SERVERS);
-
+  
+    pc.addTransceiver("audio", {
+      direction: "sendrecv",
+    });
+  
+    pc.addTransceiver("video", {
+      direction: "sendrecv",
+    });
+  
     pc.onicecandidate = (e) => {
       if (e.candidate && socketRef.current)
-        socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
+        socketRef.current.emit("call_ice", {
+          to: peer,
+          candidate: e.candidate,
+        });
     };
-
+  
     pc.oniceconnectionstatechange = () => {
       console.log("ICE state:", pc.iceConnectionState);
-      if (pc.iceConnectionState === "failed") {
-        try { pc.restartIce(); } catch (e) {}
-      }
     };
-
-    // FIX: ontrack only updates state — no setTimeout/querySelector.
-    // The remote <video> element is always in the DOM (never conditionally removed),
-    // so the useEffect in CallOverlay will assign srcObject reliably via the ref.
+  
     pc.ontrack = (e) => {
       console.log("Remote stream received:", e.streams);
+  
       if (e.streams && e.streams[0]) {
+        console.log(
+          "Remote tracks:",
+          e.streams[0].getTracks().map(t => ({
+            kind: t.kind,
+            enabled: t.enabled,
+            readyState: t.readyState
+          }))
+        );
+  
         const remoteStream = e.streams[0];
+  
         setCall(prev =>
-          prev ? { ...prev, remoteStream, status: "active" } : prev
+          prev
+            ? {
+                ...prev,
+                remoteStream,
+                status: "active",
+              }
+            : prev
         );
       }
     };
-
+  
     pcRef.current = pc;
     return pc;
   }, []);
@@ -432,10 +458,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       localStreamRef.current = stream;
       const pc = createPC(peer);
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: type === "video",
-      });
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socketRef.current.emit("call_offer", { to: peer, from: user.username, type, offer: pc.localDescription });
       setCall({ peer, type, direction: "outgoing", status: "pending", stream });
