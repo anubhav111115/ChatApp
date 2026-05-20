@@ -474,8 +474,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       console.log("Got local tracks:", stream.getTracks().map(t => t.kind));
       localStreamRef.current = stream;
       const pc = createPC(peer);
-      stream.getTracks().forEach(t => pc.addTrack(t, stream));
-      const offer = await pc.createOffer();
+      for (const track of stream.getTracks()) {
+        pc.addTrack(track, stream);
+      }      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socketRef.current.emit("call_offer", { to: peer, from: user.username, type, offer: pc.localDescription });
       setCall({ peer, type, direction: "outgoing", status: "pending", stream });
@@ -503,8 +504,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         console.log("Answer local tracks:", stream.getTracks().map(t => t.kind));
         localStreamRef.current = stream;
         const pc = createPC(call.peer);
-        stream.getTracks().forEach(t => pc.addTrack(t, stream));
-        await pc.setRemoteDescription(new RTCSessionDescription(call._offer));
+        for (const track of stream.getTracks()) {
+          pc.addTrack(track, stream);
+        }        await pc.setRemoteDescription(new RTCSessionDescription(call._offer));
         await flushIceCandidates(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
