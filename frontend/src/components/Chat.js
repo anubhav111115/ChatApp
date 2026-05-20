@@ -1021,5 +1021,3 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 }
 
 export default Chat;
-ENDOFFILE
-echo "Done"
