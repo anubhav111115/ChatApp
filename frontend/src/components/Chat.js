@@ -124,6 +124,9 @@ function EmojiPicker({ onSelect, onClose }) {
 function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const [duration, setDuration] = useState(0);
+const [muted, setMuted] = useState(false);
+const [camOff, setCamOff] = useState(false);
   useEffect(() => {
     if (!remoteVideoRef.current || !call?.remoteStream)
       return;
