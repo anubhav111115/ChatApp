@@ -183,19 +183,18 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               remoteStream arrives, without any ref-is-null race condition.
             */}
             <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              muted={false}
-              className="call-remote-video"
-            />
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="call-local-video"
-            />
+  ref={remoteVideoRef}
+  autoPlay
+  playsInline
+  className="call-remote-video"
+/>
+<video
+  ref={localVideoRef}
+  autoPlay
+  muted
+  playsInline
+  className="call-local-video"
+/>
           </div>
         ) : (
           <div className="call-avatar-wrap">
