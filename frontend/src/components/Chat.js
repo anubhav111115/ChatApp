@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/Chat.jsx << 'ENDOFFILE'
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import axios from "axios";
@@ -27,6 +26,9 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+// ─── ICE / TURN CONFIG ───────────────────────────────────────────────────────
+// Replace username/credential with your free Metered.ca credentials:
+// Sign up at https://www.metered.ca/tools/openrelay
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -50,18 +52,6 @@ const ICE_SERVERS = {
   ],
 };
 
-// ─── ALL EMOJIS ───────────────────────────────────────────────────────────────
-const EMOJI_CATEGORIES = {
-  "😀 Smileys": ["😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😊","😇","🥰","😍","🤩","😘","😗","😚","😙","🥲","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","🥸","😎","🤓","🧐","😕","😟","🙁","☹️","😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👹","👺","👻","👽","👾","🤖"],
-  "👋 People": ["👋","🤚","🖐","✋","🖖","👌","🤌","🤏","✌️","🤞","🤟","🤘","🤙","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","👐","🤲","🤝","🙏","✍️","💅","🤳","💪","🦾","🦿","🦵","🦶","👂","🦻","👃","🫀","🫁","🧠","🦷","🦴","👀","👁","👅","👄","💋","🫦","👶","🧒","👦","👧","🧑","👱","👨","🧔","👩","🧓","👴","👵","🙍","🙎","🙅","🙆","💁","🙋","🧏","🙇","🤦","🤷"],
-  "🐶 Animals": ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🙈","🙉","🙊","🐔","🐧","🐦","🐤","🦆","🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐜","🦟","🦗","🦂","🐢","🐍","🦎","🦖","🦕","🐙","🦑","🦐","🦞","🦀","🐡","🐠","🐟","🐬","🐳","🐋","🦈","🐊","🐅","🐆","🦓","🦍","🦧","🦣","🐘","🦛","🦏","🐪","🐫","🦒","🦘","🦬","🐃","🐂","🐄","🐎","🐖","🐏","🐑","🦙","🐐","🦌","🐕","🐩","🦮","🐈","🐓","🦃","🦤","🦚","🦜","🦢","🦩","🕊","🐇","🦝","🦨","🦡","🦫","🦦","🦥","🐁","🐀","🐿","🦔"],
-  "🍎 Food": ["🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍈","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑","🥦","🥬","🥒","🌶","🫑","🥕","🧄","🧅","🥔","🍠","🥐","🥯","🍞","🥖","🥨","🧀","🥚","🍳","🧈","🥞","🧇","🥓","🥩","🍗","🍖","🌭","🍔","🍟","🍕","🫓","🥙","🧆","🌮","🌯","🫔","🥗","🥘","🫕","🍝","🍜","🍲","🍛","🍣","🍱","🥟","🦪","🍤","🍙","🍚","🍘","🍥","🥮","🍢","🧁","🍰","🎂","🍮","🍭","🍬","🍫","🍿","🍩","🍪","🌰","🥜","🍯","🧃","🥤","🧋","☕","🍵","🫖","🍺","🍻","🥂","🍷","🫗","🥃","🍸","🍹","🧉","🍾","🧊"],
-  "🌍 Travel": ["🚗","🚕","🚙","🚌","🚎","🏎","🚓","🚑","🚒","🚐","🛻","🚚","🚛","🚜","🏍","🛵","🚲","🛴","🛹","🛼","🛺","🚨","🚔","🚍","🚘","🚖","🚡","🚠","🚟","🚃","🚋","🚞","🚝","🚄","🚅","🚈","🚂","🚆","🚇","🚊","🚉","✈️","🛫","🛬","🛩","💺","🛸","🚁","🛶","⛵","🚤","🛥","🛳","⛴","🚢","🗺","🧭","🏔","⛰","🌋","🗻","🏕","🏖","🏜","🏝","🏞","🏟","🏛","🏗","🧱","🪨","🪵","🛖","🏘","🏚","🏠","🏡","🏢","🏣","🏤","🏥","🏦","🏨","🏩","🏪","🏫","🏬","🏭","🏯","🏰","💒","🗼","🗽","⛪","🕌","🛕","🕍","⛩","🕋","⛲","⛺","🌁","🌃","🏙","🌄","🌅","🌆","🌇","🌉","🎠","🎡","🎢","💈","🎪"],
-  "⚽ Activities": ["⚽","🏀","🏈","⚾","🥎","🎾","🏐","🏉","🥏","🎱","🪀","🏓","🏸","🏒","🏑","🥍","🏏","🪃","🥅","⛳","🪁","🏹","🎣","🤿","🥊","🥋","🎽","🛹","🛼","🛷","⛸","🥌","🎿","⛷","🏂","🪂","🏋","🤼","🤸","⛹","🤺","🏇","🧘","🏄","🏊","🤽","🚣","🧗","🚵","🚴","🏆","🥇","🥈","🥉","🏅","🎖","🎗","🎫","🎟","🎪","🤹","🎭","🩰","🎨","🎬","🎤","🎧","🎼","🎹","🪘","🥁","🎷","🎺","🎸","🪕","🎻","🎲","♟","🎯","🎳","🎮","🎰","🧩"],
-  "💡 Objects": ["⌚","📱","📲","💻","⌨️","🖥","🖨","🖱","🖲","🕹","🗜","💽","💾","💿","📀","📼","📷","📸","📹","🎥","📽","🎞","📞","☎️","📟","📠","📺","📻","🧭","⏱","⏲","⏰","🕰","⌛","⏳","📡","🔋","🪫","🔌","💡","🔦","🕯","🪔","🧯","🛢","💸","💵","💴","💶","💷","🪙","💰","💳","💎","⚖️","🪜","🧰","🪛","🔧","🔨","⚒","🛠","⛏","🪚","🔩","🪤","🧲","🔫","💣","🪓","🔪","🗡","⚔️","🛡","🪃","🏹","🪝","🔗","⛓","🪝","🧱","🪞","🪟","🛋","🪑","🚽","🪠","🚿","🛁","🧴","🪥","🧷","🧹","🧺","🧻","🪣","🧼","🫧","🪒","🧽","🧯","🛒","🚪","🪤","🪑","🧸","🖼","🛍","🎁","🎀","🎊","🎉","🎈","🎏","🎐","🧧","✉️","📩","📨","📧","📥","📤","📦","🏷","📪","📫","📬","📭","📮","🗳","✏️","✒️","🖊","🖋","📝","📁","📂","🗂","📅","📆","🗒","🗓","📇","📈","📉","📊","📋","📌","📍","✂️","🗃","🗄","🗑","🔒","🔓","🔏","🔐","🔑","🗝","🔨","🪓","⛏","⚒","🛠","🗡","⚔️","🛡","🔧","🔩","⚙️","🗜","🔗","⛓","🧲","🔮","🪄","🧿","🔭","🔬","🩺","💉","🩹","💊","🩻","🩼","🩺","🌡","🧬","🦠","🧫","🧪"],
-  "💕 Symbols": ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","❣️","💕","💞","💓","💗","💖","💘","💝","💟","☮️","✝️","☪️","🕉","☸️","✡️","🔯","🕎","☯️","☦️","🛐","⛎","♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓","🆔","⚛️","🉑","☢️","☣️","📴","📳","🈶","🈚","🈸","🈺","🈷️","✴️","🆚","💮","🉐","㊙️","㊗️","🈴","🈵","🈹","🈲","🅰️","🅱️","🆎","🆑","🅾️","🆘","❌","⭕","🛑","⛔","📛","🚫","💯","❗","❕","❓","❔","‼️","⁉️","🔅","🔆","〽️","⚠️","🚸","🔱","⚜️","🔰","♻️","✅","🈯","💹","❎","🌐","💠","Ⓜ️","🌀","💤","🏧","🚾","♿","🅿️","🛗","🈳","🈂️","🛂","🛃","🛄","🛅","🚹","🚺","🚼","⚧","🚻","🚮","🎦","📵","🔞","🔃","🔄","🔙","🔚","🔛","🔜","🔝","🛐","🔀","🔁","🔂","⏩","⏫","⏭","⏯","🔼","⏪","⏬","⏮","🔽","🎵","🎶","➕","➖","➗","✖️","♾","💲","💱","™️","©️","®️","〰️","➰","➿","🔚"],
-};
-
 // ─── CALL OVERLAY ─────────────────────────────────────────────────────────────
 function CallOverlay({ call, user, onEnd, isDark }) {
   const localVideoRef = useRef(null);
@@ -69,19 +59,17 @@ function CallOverlay({ call, user, onEnd, isDark }) {
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
-  const [facingMode, setFacingMode] = useState("user");
-  const streamRef = useRef(null);
 
   useEffect(() => {
     if (call.stream && localVideoRef.current) {
       localVideoRef.current.srcObject = call.stream;
-      streamRef.current = call.stream;
     }
   }, [call.stream]);
 
   useEffect(() => {
-    if (call.remoteStream && remoteVideoRef.current)
+    if (call.remoteStream && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = call.remoteStream;
+    }
   }, [call.remoteStream]);
 
   useEffect(() => {
@@ -94,47 +82,16 @@ function CallOverlay({ call, user, onEnd, isDark }) {
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   const toggleMute = () => {
-    const stream = streamRef.current || call.stream;
-    if (stream) {
-      stream.getAudioTracks().forEach(t => { t.enabled = muted; });
+    if (call.stream) {
+      call.stream.getAudioTracks().forEach(t => { t.enabled = muted; });
       setMuted(!muted);
     }
   };
 
   const toggleCam = () => {
-    const stream = streamRef.current || call.stream;
-    if (stream) {
-      stream.getVideoTracks().forEach(t => { t.enabled = camOff; });
+    if (call.stream) {
+      call.stream.getVideoTracks().forEach(t => { t.enabled = camOff; });
       setCamOff(!camOff);
-    }
-  };
-
-  // Camera switch (front/back)
-  const switchCamera = async () => {
-    const stream = streamRef.current || call.stream;
-    if (!stream) return;
-    const newFacing = facingMode === "user" ? "environment" : "user";
-    try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacing },
-        audio: true,
-      });
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      // Replace track in peer connection
-      if (call._pc) {
-        const sender = call._pc.getSenders().find(s => s.track && s.track.kind === "video");
-        if (sender) await sender.replaceTrack(newVideoTrack);
-      }
-      // Stop old video track
-      stream.getVideoTracks().forEach(t => t.stop());
-      // Replace in stream
-      stream.removeTrack(stream.getVideoTracks()[0]);
-      stream.addTrack(newVideoTrack);
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-      streamRef.current = stream;
-      setFacingMode(newFacing);
-    } catch (e) {
-      console.warn("Camera switch failed:", e);
     }
   };
 
@@ -160,7 +117,9 @@ function CallOverlay({ call, user, onEnd, isDark }) {
         )}
         <div className="call-peer-name">{call.peer}</div>
         {isPending && isIncoming && (
-          <div className="call-status-text">Incoming {isVideo ? "video" : "voice"} call…</div>
+          <div className="call-status-text">
+            Incoming {isVideo ? "video" : "voice"} call…
+          </div>
         )}
         {isPending && !isIncoming && (
           <div className="call-status-text">Calling…</div>
@@ -171,25 +130,40 @@ function CallOverlay({ call, user, onEnd, isDark }) {
         <div className="call-controls">
           {call.status === "active" && (
             <>
-              <button className={`call-ctrl-btn ${muted ? "off" : ""}`} onClick={toggleMute} title={muted ? "Unmute" : "Mute"}>
+              <button
+                className={`call-ctrl-btn ${muted ? "off" : ""}`}
+                onClick={toggleMute}
+                title={muted ? "Unmute" : "Mute"}
+              >
                 {muted ? "🔇" : "🎤"}
               </button>
               {isVideo && (
-                <>
-                  <button className={`call-ctrl-btn ${camOff ? "off" : ""}`} onClick={toggleCam} title={camOff ? "Cam on" : "Cam off"}>
-                    {camOff ? "📷" : "🎥"}
-                  </button>
-                  <button className="call-ctrl-btn" onClick={switchCamera} title="Switch camera">
-                    🔄
-                  </button>
-                </>
+                <button
+                  className={`call-ctrl-btn ${camOff ? "off" : ""}`}
+                  onClick={toggleCam}
+                  title={camOff ? "Cam on" : "Cam off"}
+                >
+                  {camOff ? "📷" : "🎥"}
+                </button>
               )}
             </>
           )}
           {isPending && isIncoming && (
-            <button className="call-ctrl-btn accept" onClick={() => onEnd("accept")} title="Accept">✓</button>
+            <button
+              className="call-ctrl-btn accept"
+              onClick={() => onEnd("accept")}
+              title="Accept"
+            >
+              ✓
+            </button>
           )}
-          <button className="call-ctrl-btn end" onClick={() => onEnd("end")} title="End">✕</button>
+          <button
+            className="call-ctrl-btn end"
+            onClick={() => onEnd("end")}
+            title="End"
+          >
+            ✕
+          </button>
         </div>
       </div>
     </div>
@@ -219,7 +193,8 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
     if (newPass && newPass.length < 4) return showMsg("error", "New password must be at least 4 characters");
     setLoading(true);
     try {
-      await axios.post("https://chatapp-16sp.onrender.com/api/auth/update", {
+      await axios.post(
+        "https://chatapp-16sp.onrender.com/api/auth/update", {
         username: user.username,
         currentPassword: currentPass,
         newUsername: newUsername !== user.username ? newUsername : undefined,
@@ -235,11 +210,15 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
 
   return (
     <div className="settings-overlay" onClick={onClose}>
-      <div className={`settings-panel ${isDark ? "dark" : "light"}`} onClick={e => e.stopPropagation()}>
+      <div
+        className={`settings-panel ${isDark ? "dark" : "light"}`}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="settings-header">
           <div className="settings-title">Settings</div>
           <button className="settings-close" onClick={onClose}>&#x2715;</button>
         </div>
+
         <div className="settings-avatar-row">
           <div className="settings-avatar" style={{ background: getColor(user.username) }}>
             {user.username[0].toUpperCase()}
@@ -249,100 +228,85 @@ function SettingsPanel({ user, onLogout, onClose, isDark }) {
             <div className="settings-ustatus">Online</div>
           </div>
         </div>
+
         <div className="settings-divider" />
         <div className="settings-section-label">Account</div>
+
         <div className="settings-field">
           <label className="settings-label">Username</label>
-          <input className="settings-input" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="New username" />
+          <input
+            className="settings-input"
+            value={newUsername}
+            onChange={e => setNewUsername(e.target.value)}
+            placeholder="New username"
+          />
         </div>
+
         <div className="settings-section-label" style={{ marginTop: 8 }}>Change Password</div>
+
         <div className="settings-field">
           <label className="settings-label">Current Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showCurrent ? "text" : "password"} value={currentPass} onChange={e => setCurrentPass(e.target.value)} placeholder="Required to save changes" />
-            <button className="settings-eye" onClick={() => setShowCurrent(!showCurrent)}>{showCurrent ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showCurrent ? "text" : "password"}
+              value={currentPass}
+              onChange={e => setCurrentPass(e.target.value)}
+              placeholder="Required to save changes"
+            />
+            <button className="settings-eye" onClick={() => setShowCurrent(!showCurrent)}>
+              {showCurrent ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
+
         <div className="settings-field">
           <label className="settings-label">New Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showNew ? "text" : "password"} value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Leave blank to keep current" />
-            <button className="settings-eye" onClick={() => setShowNew(!showNew)}>{showNew ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showNew ? "text" : "password"}
+              value={newPass}
+              onChange={e => setNewPass(e.target.value)}
+              placeholder="Leave blank to keep current"
+            />
+            <button className="settings-eye" onClick={() => setShowNew(!showNew)}>
+              {showNew ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
+
         <div className="settings-field">
           <label className="settings-label">Confirm New Password</label>
           <div className="settings-input-wrap">
-            <input className="settings-input" type={showConfirm ? "text" : "password"} value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Repeat new password" />
-            <button className="settings-eye" onClick={() => setShowConfirm(!showConfirm)}>{showConfirm ? "Hide" : "Show"}</button>
+            <input
+              className="settings-input"
+              type={showConfirm ? "text" : "password"}
+              value={confirmPass}
+              onChange={e => setConfirmPass(e.target.value)}
+              placeholder="Repeat new password"
+            />
+            <button className="settings-eye" onClick={() => setShowConfirm(!showConfirm)}>
+              {showConfirm ? "Hide" : "Show"}
+            </button>
           </div>
         </div>
+
         {msg && <div className={`settings-msg ${msg.type}`}>{msg.text}</div>}
-        <button className="settings-save-btn" onClick={handleSave} disabled={loading}>{loading ? "Saving..." : "Save Changes"}</button>
+
+        <button className="settings-save-btn" onClick={handleSave} disabled={loading}>
+          {loading ? "Saving..." : "Save Changes"}
+        </button>
+
         <div className="settings-divider" />
+
         <button className="settings-logout-btn" onClick={onLogout}>Logout</button>
       </div>
     </div>
   );
 }
 
-// ─── EMOJI PICKER COMPONENT ───────────────────────────────────────────────────
-function EmojiPicker({ onSelect, onClose }) {
-  const [activeCategory, setActiveCategory] = useState(Object.keys(EMOJI_CATEGORIES)[0]);
-  const [emojiSearch, setEmojiSearch] = useState("");
-  const pickerRef = useRef(null);
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target)) onClose();
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [onClose]);
-
-  const searchResults = emojiSearch
-    ? Object.values(EMOJI_CATEGORIES).flat().filter((_, i) =>
-        Object.values(EMOJI_CATEGORIES).flat()[i]
-      ).filter(e => e.includes(emojiSearch))
-    : null;
-
-  const displayEmojis = searchResults || EMOJI_CATEGORIES[activeCategory] || [];
-
-  return (
-    <div className="emoji-picker-full" ref={pickerRef}>
-      <div className="emoji-search-wrap">
-        <input
-          className="emoji-search"
-          placeholder="Search emoji..."
-          value={emojiSearch}
-          onChange={e => setEmojiSearch(e.target.value)}
-          autoFocus
-        />
-      </div>
-      {!emojiSearch && (
-        <div className="emoji-categories">
-          {Object.keys(EMOJI_CATEGORIES).map(cat => (
-            <button
-              key={cat}
-              className={`emoji-cat-btn ${activeCategory === cat ? "active" : ""}`}
-              onClick={() => setActiveCategory(cat)}
-              title={cat}
-            >
-              {cat.split(" ")[0]}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="emoji-grid">
-        {displayEmojis.map((em, i) => (
-          <button key={i} className="emoji-opt" onClick={() => onSelect(em)}>{em}</button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── MAIN CHAT ────────────────────────────────────────────────────────────────
+// ─── MAIN CHAT COMPONENT ──────────────────────────────────────────────────────
 function Chat({ user, onLogout, theme, toggleTheme }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -353,7 +317,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [activeRoomName, setActiveRoomName] = useState("General Chat");
   const [search, setSearch] = useState("");
   const [attachment, setAttachment] = useState(null);
-  const [attachmentLoading, setAttachmentLoading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [showSettings, setShowSettings] = useState(false);
@@ -366,15 +329,17 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const socketRef = useRef(null);
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
+  // ✅ FIX 1: Queue ICE candidates that arrive before remoteDescription is set
   const iceCandidateQueue = useRef([]);
   const activeRoomRef = useRef("general");
   const bottomRef = useRef(null);
   const typingTimer = useRef(null);
   const fileInputRef = useRef(null);
 
+  const EMOJIS = ["😀","😂","🔥","❤️","👍","🎉","😎","🤔","💯","🚀","😊","🙌","✨","😅","🤣","💪","🥳","😍","🤩","👏"];
   const isDark = theme === "dark";
 
-  // ── WebRTC helpers ──────────────────────────────────────────────────────────
+  // ─── HELPERS ──────────────────────────────────────────────────────────────
 
   const stopLocalStream = useCallback(() => {
     if (localStreamRef.current) {
@@ -388,34 +353,60 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     iceCandidateQueue.current = [];
   }, []);
 
+  // ✅ FIX 2: Flush queued ICE candidates after remoteDescription is set
   const flushIceCandidates = useCallback(async (pc) => {
+    console.log(`Flushing ${iceCandidateQueue.current.length} queued ICE candidates`);
     for (const candidate of iceCandidateQueue.current) {
-      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
-      catch (e) { console.warn("ICE flush error:", e); }
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn("ICE flush error:", e);
+      }
     }
     iceCandidateQueue.current = [];
   }, []);
 
+  // ✅ FIX 3: Proper PC creation with ICE state logging and restartIce on failure
   const createPC = useCallback((peer) => {
-    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+    // Close any existing PC first
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
     pc.onicecandidate = (e) => {
-      if (e.candidate && socketRef.current)
+      if (e.candidate && socketRef.current) {
+        console.log("Sending ICE candidate to", peer);
         socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log("ICE:", pc.iceConnectionState);
-      if (pc.iceConnectionState === "failed") {
-        try { pc.restartIce(); } catch (e) {}
+      } else if (!e.candidate) {
+        console.log("ICE gathering complete");
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE connection state:", pc.iceConnectionState);
+      if (pc.iceConnectionState === "failed") {
+        console.warn("ICE failed — attempting restartIce");
+        try { pc.restartIce(); } catch (e) { console.error("restartIce error:", e); }
+      }
+      if (pc.iceConnectionState === "disconnected") {
+        console.warn("ICE disconnected");
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("PC connection state:", pc.connectionState);
+    };
+
+    // ✅ FIX 4: ontrack fires when remote media arrives — set active here
     pc.ontrack = (e) => {
-      console.log("Remote track:", e.track.kind);
+      console.log("Remote track received:", e.track.kind, e.streams);
       if (e.streams && e.streams[0]) {
-        setCall(prev => prev ? { ...prev, remoteStream: e.streams[0], status: "active", _pc: pc } : prev);
+        setCall(prev =>
+          prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev
+        );
       }
     };
 
@@ -423,114 +414,176 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     return pc;
   }, []);
 
-  // ── FIX: voice call — always request audio, use echoCancellation ────────────
-  const getMediaConstraints = (type) => {
-    if (type === "video") {
-      return {
-        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-      };
-    }
-    // voice — audio only, explicit constraints
-    return {
-      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
-      video: false,
-    };
-  };
-
+  // ─── START CALL (caller side) ─────────────────────────────────────────────
   const startCall = useCallback(async (peer, type) => {
     if (call) return;
     iceCandidateQueue.current = [];
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(type));
-      console.log("Got stream tracks:", stream.getTracks().map(t => `${t.kind}(${t.label})`));
+      const constraints = type === "video"
+        ? { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } }
+        : { audio: true, video: false };
+
+      console.log("Requesting media with constraints:", constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("Got local stream, tracks:", stream.getTracks().map(t => t.kind));
+
       localStreamRef.current = stream;
       const pc = createPC(peer);
-      stream.getTracks().forEach(t => { console.log("Adding track:", t.kind); pc.addTrack(t, stream); });
-      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: type === "video" });
+
+      stream.getTracks().forEach(t => {
+        console.log("Adding track to PC:", t.kind);
+        pc.addTrack(t, stream);
+      });
+
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socketRef.current.emit("call_offer", { to: peer, from: user.username, type, offer: pc.localDescription });
-      setCall({ peer, type, direction: "outgoing", status: "pending", stream, _pc: pc });
+      console.log("Offer created and set as local description");
+
+      socketRef.current.emit("call_offer", {
+        to: peer,
+        from: user.username,
+        type,
+        offer: pc.localDescription,
+      });
+
+      setCall({ peer, type, direction: "outgoing", status: "pending", stream });
     } catch (err) {
+      console.error("startCall error:", err.name, err.message);
       stopLocalStream();
-      console.error("startCall error:", err);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        alert("Permission denied!\n\nAllow microphone" + (type === "video" ? " & camera" : "") + " in your browser:\n• Click the lock icon in the address bar\n• Set permissions to Allow\n• Refresh and try again");
-      } else if (err.name === "NotFoundError") {
-        alert("No microphone" + (type === "video" ? "/camera" : "") + " found.");
-      } else if (err.name === "NotReadableError") {
-        alert("Mic/camera is used by another app. Close it and try again.");
+        alert(
+          "🎤 Permission denied!\n\n" +
+          "Please allow microphone" + (type === "video" ? " and camera" : "") + " access:\n" +
+          "• Click the 🔒 lock icon in your browser address bar\n" +
+          "• Set Microphone" + (type === "video" ? " and Camera" : "") + " to 'Allow'\n" +
+          "• Refresh the page and try again"
+        );
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        alert(
+          "No " + (type === "video" ? "camera/microphone" : "microphone") + " found!\n\n" +
+          "Please connect a device and try again."
+        );
+      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+        alert(
+          "Your " + (type === "video" ? "camera/microphone" : "microphone") + " is being used by another app.\n\n" +
+          "Please close other apps using it and try again."
+        );
       } else {
         alert("Could not start call: " + err.message);
       }
     }
   }, [call, createPC, stopLocalStream, user.username]);
 
+  // ─── HANDLE CALL ACTIONS (accept / end) ──────────────────────────────────
   const handleCallEnd = useCallback(async (action) => {
     if (action === "accept" && call) {
       iceCandidateQueue.current = [];
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(call.type));
-        console.log("Answer stream tracks:", stream.getTracks().map(t => `${t.kind}(${t.label})`));
+        const constraints = call.type === "video"
+          ? { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } }
+          : { audio: true, video: false };
+
+        console.log("Accepting call, requesting media:", constraints);
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Got local stream for answer, tracks:", stream.getTracks().map(t => t.kind));
+
         localStreamRef.current = stream;
         const pc = createPC(call.peer);
-        stream.getTracks().forEach(t => { console.log("Adding answer track:", t.kind); pc.addTrack(t, stream); });
+
+        stream.getTracks().forEach(t => {
+          console.log("Adding track to PC (answer):", t.kind);
+          pc.addTrack(t, stream);
+        });
+
+        // ✅ FIX 5: setRemoteDescription BEFORE creating answer, then flush queued ICE
+        console.log("Setting remote description (offer)");
         await pc.setRemoteDescription(new RTCSessionDescription(call._offer));
         await flushIceCandidates(pc);
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socketRef.current.emit("call_answer", { to: call.peer, answer: pc.localDescription });
-        setCall(prev => ({ ...prev, stream, status: "active", _pc: pc }));
+        console.log("Answer created and set as local description");
+
+        socketRef.current.emit("call_answer", {
+          to: call.peer,
+          answer: pc.localDescription,
+        });
+
+        setCall(prev => ({ ...prev, stream, status: "active" }));
       } catch (err) {
+        console.error("Accept call error:", err.name, err.message);
         stopLocalStream();
         setCall(null);
-        console.error("accept error:", err);
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          alert("Permission denied! Allow microphone" + (call.type === "video" ? " & camera" : "") + " in browser settings.");
+          alert(
+            "🎤 Permission denied!\n\n" +
+            "Please allow microphone" + (call.type === "video" ? " and camera" : "") + " access in your browser settings."
+          );
         } else {
           alert("Could not accept call: " + err.message);
         }
       }
     } else {
-      if (socketRef.current && call?.peer) socketRef.current.emit("call_end", { to: call.peer });
+      // End / reject
+      if (socketRef.current && call?.peer) {
+        socketRef.current.emit("call_end", { to: call.peer });
+      }
       stopLocalStream();
       setCall(null);
     }
   }, [call, createPC, flushIceCandidates, stopLocalStream]);
 
-  // ── Socket: connection ──────────────────────────────────────────────────────
+  // ─── SOCKET: CONNECTION ───────────────────────────────────────────────────
   useEffect(() => {
-    const socket = io("https://chatapp-16sp.onrender.com", { transports: ["websocket", "polling"] });
+    const socket = io("https://chatapp-16sp.onrender.com", {
+      transports: ["websocket", "polling"],
+    });
     socketRef.current = socket;
+
     socket.emit("user_online", { username: user.username });
-    const interval = setInterval(() => socket.emit("user_online", { username: user.username }), 5000);
-    socket.on("online_users", (users) => setOnlineUsers(users.filter(u => u !== user.username)));
-    return () => { clearInterval(interval); socket.disconnect(); };
+    const interval = setInterval(() => {
+      socket.emit("user_online", { username: user.username });
+    }, 5000);
+
+    socket.on("online_users", (users) =>
+      setOnlineUsers(users.filter(u => u !== user.username))
+    );
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, [user.username]);
 
-  // ── Socket: messages ────────────────────────────────────────────────────────
+  // ─── SOCKET: MESSAGES ─────────────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
 
     const handleMessage = (msg) => {
       if (msg.room === activeRoomRef.current) {
-        setMessages(prev => {
-          // Replace optimistic message with server message
-          const withoutLocal = prev.filter(m => !m._isLocal);
-          return [...withoutLocal, { ...msg, time: getTime() }];
-        });
+        setMessages(prev => [...prev, { ...msg, time: getTime() }]);
       } else if (msg.sender !== user.username) {
-        setUnreadCounts(prev => ({ ...prev, [msg.room]: (prev[msg.room] || 0) + 1 }));
+        setUnreadCounts(prev => ({
+          ...prev,
+          [msg.room]: (prev[msg.room] || 0) + 1,
+        }));
       }
     };
 
     socket.on("receive_message", handleMessage);
+
     socket.on("message_edited", (updatedMsg) => {
-      setMessages(prev => prev.map(m => m._id === updatedMsg._id ? { ...updatedMsg, time: m.time } : m));
+      setMessages(prev =>
+        prev.map(m => m._id === updatedMsg._id ? { ...updatedMsg, time: m.time } : m)
+      );
     });
+
     socket.on("message_deleted", ({ messageId }) => {
-      setMessages(prev => prev.map(m => m._id === messageId ? { ...m, deleted: true, message: "" } : m));
+      setMessages(prev =>
+        prev.map(m => m._id === messageId ? { ...m, deleted: true, message: "" } : m)
+      );
     });
 
     return () => {
@@ -540,37 +593,61 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username]);
 
-  // ── Socket: call signaling ──────────────────────────────────────────────────
+  // ─── SOCKET: CALL SIGNALING ───────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
 
+    // Incoming call offer
     socket.on("call_offer", ({ from, type, offer }) => {
+      console.log("Incoming call from", from, "type:", type);
       iceCandidateQueue.current = [];
       setCall({ peer: from, type, direction: "incoming", status: "pending", _offer: offer });
     });
 
+    // Caller receives answer from callee
     socket.on("call_answer", async ({ answer }) => {
+      console.log("Received call answer");
       const pc = pcRef.current;
       if (pc) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          console.log("Remote description (answer) set on caller");
+          // ✅ FIX 6: Flush queued ICE candidates on caller side too
           await flushIceCandidates(pc);
-        } catch (e) { console.error("answer error:", e); }
+          // Don't set "active" here — wait for ontrack to fire
+        } catch (e) {
+          console.error("setRemoteDescription (answer) error:", e);
+        }
       }
     });
 
+    // ✅ FIX 7: Queue ICE candidates if remoteDescription not yet set
     socket.on("call_ice", async ({ candidate }) => {
       const pc = pcRef.current;
-      if (!pc || !pc.remoteDescription?.type) {
+      if (!pc) {
+        console.log("No PC yet, queuing ICE candidate");
         iceCandidateQueue.current.push(candidate);
         return;
       }
-      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
-      catch (e) { console.warn("ICE error:", e); }
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        console.log("No remoteDescription yet, queuing ICE candidate");
+        iceCandidateQueue.current.push(candidate);
+        return;
+      }
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log("ICE candidate added successfully");
+      } catch (e) {
+        console.warn("addIceCandidate error:", e);
+      }
     });
 
-    socket.on("call_end", () => { stopLocalStream(); setCall(null); });
+    socket.on("call_end", () => {
+      console.log("Call ended by remote peer");
+      stopLocalStream();
+      setCall(null);
+    });
 
     return () => {
       socket.off("call_offer");
@@ -580,23 +657,32 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [flushIceCandidates, stopLocalStream]);
 
-  // ── Socket: room ────────────────────────────────────────────────────────────
+  // ─── SOCKET: ROOM SWITCHING ───────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
+
     activeRoomRef.current = activeRoom;
     socket.emit("join_room", { room: activeRoom });
     setMessages([]);
     setIsTyping(false);
     setUnreadCounts(prev => ({ ...prev, [activeRoom]: 0 }));
+
     socket.off("chat_history");
     socket.off("user_typing");
+
     socket.on("chat_history", (history) => {
-      setMessages(history.map(m => ({
-        ...m,
-        time: new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      })));
+      setMessages(
+        history.map(m => ({
+          ...m,
+          time: new Date(m.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }))
+      );
     });
+
     socket.on("user_typing", ({ username }) => {
       if (username !== user.username) {
         setTypingUser(username);
@@ -607,12 +693,12 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     });
   }, [activeRoom, user.username]);
 
+  // ─── AUTO SCROLL ──────────────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // ── Actions ─────────────────────────────────────────────────────────────────
-
+  // ─── ROOM / MESSAGE ACTIONS ───────────────────────────────────────────────
   const switchRoom = (roomId, roomName) => {
     setActiveRoom(roomId);
     setActiveRoomName(roomName);
@@ -629,65 +715,27 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   };
 
   const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
-  // ── FIX: attachment — compress images, fix FileReader ──────────────────────
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    const MAX_SIZE = 5 * 1024 * 1024; // 5MB limit for socket reliability
-    if (file.size > MAX_SIZE) {
-      alert(`File too large! Max size is 5 MB.\nYour file: ${formatBytes(file.size)}\n\nTip: For images, try compressing them first.`);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-
     const isImage = file.type.startsWith("image/");
-    setAttachmentLoading(true);
-
-    if (isImage) {
-      // Compress image using canvas before sending
-      const img = new Image();
-      const objectUrl = URL.createObjectURL(file);
-      img.onload = () => {
-        const MAX_DIM = 1200;
-        let { width, height } = img;
-        if (width > MAX_DIM || height > MAX_DIM) {
-          if (width > height) { height = Math.round((height * MAX_DIM) / width); width = MAX_DIM; }
-          else { width = Math.round((width * MAX_DIM) / height); height = MAX_DIM; }
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-        URL.revokeObjectURL(objectUrl);
-        setAttachment({ name: file.name, size: file.size, type: "image/jpeg", dataUrl, isImage: true });
-        setAttachmentLoading(false);
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        setAttachmentLoading(false);
-        alert("Could not load image.");
-      };
-      img.src = objectUrl;
-    } else {
-      const reader = new FileReader();
-      reader.onerror = () => {
-        alert("Failed to read file. Please try again.");
-        setAttachmentLoading(false);
-      };
-      reader.onload = (ev) => {
-        setAttachment({ name: file.name, size: file.size, type: file.type, dataUrl: ev.target.result, isImage: false });
-        setAttachmentLoading(false);
-      };
-      reader.readAsDataURL(file);
-    }
-    // Reset so same file can be picked again
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setAttachment({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        dataUrl: ev.target.result,
+        isImage,
+      });
+    };
+    reader.readAsDataURL(file);
   };
 
   const removeAttachment = () => {
@@ -697,23 +745,16 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const addEmoji = (emoji) => {
     setText(prev => prev + emoji);
+    setShowEmojiPicker(false);
   };
 
-  // ── FIX: sendMessage — emit with acknowledgement callback ──────────────────
   const sendMessage = () => {
-    if (attachmentLoading) return;
     if (!text.trim() && !attachment) return;
-    if (!socketRef.current?.connected) {
-      alert("Not connected to server. Please refresh.");
-      return;
-    }
-
     const msgData = {
       sender: user.username,
       room: activeRoom,
       message: text.trim(),
     };
-
     if (attachment) {
       msgData.fileData = {
         name: attachment.name,
@@ -723,28 +764,25 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         isImage: attachment.isImage,
       };
     }
-
-    // Optimistic local message
-    const localMsg = {
-      ...msgData,
-      _id: `local_${Date.now()}`,
-      _isLocal: true,
-      time: getTime(),
-      createdAt: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, localMsg]);
-
     socketRef.current.emit("send_message", msgData);
     setText("");
     setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setShowEmojiPicker(false);
   };
 
-  const startEdit = (msg) => { setEditingMsg(msg._id); setEditText(msg.message); };
+  const startEdit = (msg) => {
+    setEditingMsg(msg._id);
+    setEditText(msg.message);
+  };
 
   const submitEdit = () => {
     if (!editText.trim()) return;
-    socketRef.current.emit("edit_message", { messageId: editingMsg, newMessage: editText.trim(), room: activeRoom });
+    socketRef.current.emit("edit_message", {
+      messageId: editingMsg,
+      newMessage: editText.trim(),
+      room: activeRoom,
+    });
     setEditingMsg(null);
     setEditText("");
   };
@@ -754,7 +792,10 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     socketRef.current.emit("delete_message", { messageId: msgId, room: activeRoom });
   };
 
-  const filteredUsers = onlineUsers.filter(u => u.toLowerCase().includes(search.toLowerCase()));
+  // ─── RENDER ───────────────────────────────────────────────────────────────
+  const filteredUsers = onlineUsers.filter(u =>
+    u.toLowerCase().includes(search.toLowerCase())
+  );
   const showGeneral = "general chat".includes(search.toLowerCase()) || search === "";
 
   return (
@@ -768,13 +809,20 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           </div>
         )}
 
-        {call && <CallOverlay call={call} user={user} onEnd={handleCallEnd} isDark={isDark} />}
-
-        {showSettings && (
-          <SettingsPanel user={user} onLogout={onLogout} onClose={() => setShowSettings(false)} isDark={isDark} />
+        {call && (
+          <CallOverlay call={call} user={user} onEnd={handleCallEnd} isDark={isDark} />
         )}
 
-        {/* Sidebar */}
+        {showSettings && (
+          <SettingsPanel
+            user={user}
+            onLogout={onLogout}
+            onClose={() => setShowSettings(false)}
+            isDark={isDark}
+          />
+        )}
+
+        {/* ── Sidebar ── */}
         <div className="sidebar">
           <div className="sidebar-header">
             <div className="brand-logo">💬</div>
@@ -802,69 +850,127 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
           <div className="search-wrap">
             <span className="search-ico">🔍</span>
-            <input className="search-inp" placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} />
-            {search && <button className="search-clear" onClick={() => setSearch("")}>✕</button>}
+            <input
+              className="search-inp"
+              placeholder="Search users..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className="search-clear" onClick={() => setSearch("")}>✕</button>
+            )}
           </div>
 
           <div className="sidebar-scroll">
             {showGeneral && (
               <>
                 <div className="section-lbl">Rooms</div>
-                <div className={`contact ${activeRoom === "general" ? "active" : ""}`} onClick={() => switchRoom("general", "General Chat")}>
-                  <div className="contact-av" style={{ background: "linear-gradient(135deg,#6c63ff,#9b8fff)", fontSize: 18, width: 40, height: 40, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>💬</div>
+                <div
+                  className={`contact ${activeRoom === "general" ? "active" : ""}`}
+                  onClick={() => switchRoom("general", "General Chat")}
+                >
+                  <div
+                    className="contact-av"
+                    style={{
+                      background: "linear-gradient(135deg,#6c63ff,#9b8fff)",
+                      fontSize: 18,
+                      width: 40,
+                      height: 40,
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    💬
+                  </div>
                   <div className="contact-info">
                     <div className="contact-name">General Chat</div>
                     <div className="contact-last">Everyone can chat here</div>
                   </div>
-                  {unreadCounts["general"] > 0 && <div className="unread-badge">{unreadCounts["general"]}</div>}
+                  {unreadCounts["general"] > 0 && (
+                    <div className="unread-badge">{unreadCounts["general"]}</div>
+                  )}
                 </div>
               </>
             )}
 
             <div className="section-lbl">Online — {filteredUsers.length}</div>
-            {filteredUsers.length === 0 && search === "" && <div className="empty-users">No other users online</div>}
-            {filteredUsers.length === 0 && search !== "" && <div className="empty-users">No results for "{search}"</div>}
+
+            {filteredUsers.length === 0 && search === "" && (
+              <div className="empty-users">No other users online</div>
+            )}
+            {filteredUsers.length === 0 && search !== "" && (
+              <div className="empty-users">No results for "{search}"</div>
+            )}
 
             {filteredUsers.map((u, i) => {
               const roomId = getRoomId(user.username, u);
               return (
-                <div key={i} className={`contact ${activeRoom === roomId ? "active" : ""}`} onClick={() => switchRoom(roomId, u)}>
+                <div
+                  key={i}
+                  className={`contact ${activeRoom === roomId ? "active" : ""}`}
+                  onClick={() => switchRoom(roomId, u)}
+                >
                   <div className="contact-av-wrap">
-                    <div className="contact-av" style={{ background: getColor(u) }}>{u[0].toUpperCase()}</div>
+                    <div className="contact-av" style={{ background: getColor(u) }}>
+                      {u[0].toUpperCase()}
+                    </div>
                     <span className="online-badge" />
                   </div>
                   <div className="contact-info">
                     <div className="contact-name">{u}</div>
                     <div className="contact-last online-text">Online</div>
                   </div>
-                  {unreadCounts[roomId] > 0 && <div className="unread-badge">{unreadCounts[roomId]}</div>}
+                  {unreadCounts[roomId] > 0 && (
+                    <div className="unread-badge">{unreadCounts[roomId]}</div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Main chat */}
+        {/* ── Main Chat ── */}
         <div className="chat-main">
           <div className="chat-header">
-            <div className="ch-av" style={{ background: activeRoom === "general" ? "linear-gradient(135deg,#6c63ff,#9b8fff)" : getColor(activeRoomName), fontSize: activeRoom === "general" ? 20 : 16 }}>
+            <div
+              className="ch-av"
+              style={{
+                background: activeRoom === "general"
+                  ? "linear-gradient(135deg,#6c63ff,#9b8fff)"
+                  : getColor(activeRoomName),
+                fontSize: activeRoom === "general" ? 20 : 16,
+              }}
+            >
               {activeRoom === "general" ? "💬" : activeRoomName[0].toUpperCase()}
             </div>
             <div className="ch-info">
               <div className="ch-name">{activeRoomName}</div>
               <div className="ch-status">
                 <span className="online-dot" />
-                {activeRoom === "general" ? `${onlineUsers.length + 1} members online` : "Private · End-to-end encrypted"}
+                {activeRoom === "general"
+                  ? `${onlineUsers.length + 1} members online`
+                  : "Private · End-to-end encrypted"}
               </div>
             </div>
             {activeRoom !== "general" && (
               <div className="ch-actions">
-                <button className="call-icon-btn voice" onClick={() => startCall(activeRoomName, "voice")} title="Voice call">
+                <button
+                  className="call-icon-btn voice"
+                  onClick={() => startCall(activeRoomName, "voice")}
+                  title="Voice call"
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.21 6.21l.97-.97a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
                   </svg>
                 </button>
-                <button className="call-icon-btn video" onClick={() => startCall(activeRoomName, "video")} title="Video call">
+                <button
+                  className="call-icon-btn video"
+                  onClick={() => startCall(activeRoomName, "video")}
+                  title="Video call"
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polygon points="23 7 16 12 23 17 23 7" />
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
@@ -878,7 +984,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             {messages.length === 0 && (
               <div className="empty-chat">
                 <div className="empty-icon">{activeRoom === "general" ? "💬" : "🔒"}</div>
-                <p className="empty-title">{activeRoom === "general" ? "Welcome to General Chat!" : `Private chat with ${activeRoomName}`}</p>
+                <p className="empty-title">
+                  {activeRoom === "general"
+                    ? "Welcome to General Chat!"
+                    : `Private chat with ${activeRoomName}`}
+                </p>
                 <p className="empty-sub">Be the first to say hello</p>
               </div>
             )}
@@ -891,20 +1001,40 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
               const isEditing = editingMsg === msg._id;
 
               return (
-                <div key={msg._id || i} className={`msg-row ${mine ? "mine" : ""}`} onMouseEnter={() => setHoveredMsg(msg._id)} onMouseLeave={() => setHoveredMsg(null)}>
+                <div
+                  key={msg._id || i}
+                  className={`msg-row ${mine ? "mine" : ""}`}
+                  onMouseEnter={() => setHoveredMsg(msg._id)}
+                  onMouseLeave={() => setHoveredMsg(null)}
+                >
                   {!mine && (
-                    <div className="msg-av" style={{ background: getColor(msg.sender), opacity: showAv ? 1 : 0 }}>
+                    <div
+                      className="msg-av"
+                      style={{ background: getColor(msg.sender), opacity: showAv ? 1 : 0 }}
+                    >
                       {msg.sender[0].toUpperCase()}
                     </div>
                   )}
+
                   <div className="bwrap">
                     {!mine && showName && !isDeleted && (
-                      <div className="bsender" style={{ color: getColor(msg.sender) }}>{msg.sender}</div>
+                      <div className="bsender" style={{ color: getColor(msg.sender) }}>
+                        {msg.sender}
+                      </div>
                     )}
+
                     {isEditing ? (
                       <div className="edit-wrap">
-                        <input className="edit-input" value={editText} onChange={e => setEditText(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter") submitEdit(); if (e.key === "Escape") setEditingMsg(null); }} autoFocus />
+                        <input
+                          className="edit-input"
+                          value={editText}
+                          onChange={e => setEditText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") submitEdit();
+                            if (e.key === "Escape") setEditingMsg(null);
+                          }}
+                          autoFocus
+                        />
                         <div className="edit-actions">
                           <button className="edit-save" onClick={submitEdit}>Save</button>
                           <button className="edit-cancel" onClick={() => setEditingMsg(null)}>Cancel</button>
@@ -917,10 +1047,19 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                         ) : (
                           <>
                             {msg.fileData?.isImage && (
-                              <img src={msg.fileData.data} alt={msg.fileData.name} className="bubble-img clickable" onClick={() => setLightboxImg(msg.fileData.data)} />
+                              <img
+                                src={msg.fileData.data}
+                                alt={msg.fileData.name}
+                                className="bubble-img clickable"
+                                onClick={() => setLightboxImg(msg.fileData.data)}
+                              />
                             )}
                             {msg.fileData && !msg.fileData.isImage && (
-                              <a href={msg.fileData.data} download={msg.fileData.name} className="file-download-link">
+                              <a
+                                href={msg.fileData.data}
+                                download={msg.fileData.name}
+                                className="file-download-link"
+                              >
                                 <div className="file-card">
                                   <span className="file-card-icon">📄</span>
                                   <div className="file-card-info">
@@ -932,24 +1071,47 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
                               </a>
                             )}
                             {msg.image && !msg.fileData && (
-                              <img src={msg.image} alt="attachment" className="bubble-img clickable" onClick={() => setLightboxImg(msg.image)} />
+                              <img
+                                src={msg.image}
+                                alt="attachment"
+                                className="bubble-img clickable"
+                                onClick={() => setLightboxImg(msg.image)}
+                              />
                             )}
-                            {msg.message && <span className="btext">{msg.message}</span>}
-                            {msg.edited && <span className="edited-tag">edited</span>}
+                            {msg.message && (
+                              <span className="btext">{msg.message}</span>
+                            )}
+                            {msg.edited && (
+                              <span className="edited-tag">edited</span>
+                            )}
                             <span className="btime">{msg.time}</span>
                           </>
                         )}
                       </div>
                     )}
-                    {mine && !isDeleted && !isEditing && hoveredMsg === msg._id && !msg._isLocal && (
+
+                    {mine && !isDeleted && !isEditing && hoveredMsg === msg._id && (
                       <div className="msg-actions mine">
                         {msg.message && !msg.fileData && (
-                          <button className="msg-action-btn edit" onClick={() => startEdit(msg)} title="Edit">✏️</button>
+                          <button
+                            className="msg-action-btn edit"
+                            onClick={() => startEdit(msg)}
+                            title="Edit"
+                          >
+                            ✏️
+                          </button>
                         )}
-                        <button className="msg-action-btn delete" onClick={() => deleteMessage(msg._id)} title="Delete">🗑️</button>
+                        <button
+                          className="msg-action-btn delete"
+                          onClick={() => deleteMessage(msg._id)}
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     )}
                   </div>
+
                   {mine && (
                     <div className="msg-av" style={{ background: getColor(msg.sender) }}>
                       {msg.sender[0].toUpperCase()}
@@ -961,22 +1123,20 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
             {isTyping && (
               <div className="msg-row">
-                <div className="msg-av" style={{ background: getColor(typingUser) }}>{typingUser[0]?.toUpperCase()}</div>
+                <div className="msg-av" style={{ background: getColor(typingUser) }}>
+                  {typingUser[0]?.toUpperCase()}
+                </div>
                 <div className="bubble theirs typing-bubble">
-                  <span className="tdot" /><span className="tdot" /><span className="tdot" />
+                  <span className="tdot" />
+                  <span className="tdot" />
+                  <span className="tdot" />
                 </div>
               </div>
             )}
             <div ref={bottomRef} />
           </div>
 
-          {attachmentLoading && (
-            <div className="attach-preview">
-              <div className="attach-file-preview"><span>⏳</span><div><div className="attach-fname">Loading…</div></div></div>
-            </div>
-          )}
-
-          {attachment && !attachmentLoading && (
+          {attachment && (
             <div className="attach-preview">
               {attachment.isImage ? (
                 <img src={attachment.dataUrl} alt="preview" className="attach-img" />
@@ -994,23 +1154,53 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           )}
 
           {showEmojiPicker && (
-            <EmojiPicker onSelect={addEmoji} onClose={() => setShowEmojiPicker(false)} />
+            <div className="emoji-picker">
+              {EMOJIS.map((em, i) => (
+                <button key={i} className="emoji-opt" onClick={() => addEmoji(em)}>
+                  {em}
+                </button>
+              ))}
+            </div>
           )}
 
           <div className="input-area">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: "none" }}
-              accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.zip,.mp4,.mp3" />
-            <button className="input-icon-btn" title="Attach file" onClick={() => fileInputRef.current?.click()}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              style={{ display: "none" }}
+              accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx"
+            />
+            <button
+              className="input-icon-btn"
+              title="Attach file"
+              onClick={() => fileInputRef.current.click()}
+            >
               📎
             </button>
-            <button className={`input-icon-btn ${showEmojiPicker ? "active" : ""}`} title="Emoji"
-              onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(v => !v); }}>
+            <button
+              className={`input-icon-btn ${showEmojiPicker ? "active" : ""}`}
+              title="Emoji"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEmojiPicker(!showEmojiPicker);
+              }}
+            >
               😊
             </button>
-            <textarea className="msg-input" placeholder={`Message ${activeRoomName}...`} value={text}
-              onChange={handleTyping} onKeyDown={handleKey} rows={1} />
-            <button className={`send-btn ${(text.trim() || attachment) ? "ready" : ""}`}
-              onClick={sendMessage} disabled={(!text.trim() && !attachment) || attachmentLoading}>
+            <textarea
+              className="msg-input"
+              placeholder={`Message ${activeRoomName}...`}
+              value={text}
+              onChange={handleTyping}
+              onKeyDown={handleKey}
+              rows={1}
+            />
+            <button
+              className={`send-btn ${(text.trim() || attachment) ? "ready" : ""}`}
+              onClick={sendMessage}
+              disabled={!text.trim() && !attachment}
+            >
               &#x27A4;
             </button>
           </div>
