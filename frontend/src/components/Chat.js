@@ -124,6 +124,31 @@ function EmojiPicker({ onSelect, onClose }) {
 function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  useEffect(() => {
+    console.log("Remote stream state:", call?.remoteStream);
+  
+    if (
+      remoteVideoRef.current &&
+      call?.remoteStream
+    ) {
+      console.log("Attaching remote stream");
+  
+      remoteVideoRef.current.srcObject =
+        call.remoteStream;
+  
+      remoteVideoRef.current
+        .play()
+        .then(() =>
+          console.log("Remote video playing")
+        )
+        .catch(err =>
+          console.log(
+            "Video play error:",
+            err
+          )
+        );
+    }
+  }, [call?.remoteStream]);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
