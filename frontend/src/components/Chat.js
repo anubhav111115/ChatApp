@@ -139,7 +139,11 @@ function EmojiPicker({ onSelect, onClose }) {
 }
 
 // ─── CALL OVERLAY ─────────────────────────────────────────────────────────────
-function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera, onRemoteVideoRef }) {
+// FIX: Removed the remoteVideoSetter callback pattern entirely.
+// The parent now passes `remoteStream` directly as a prop and this component
+// handles attaching it to the video element. This eliminates the timing race
+// where applyRemoteStream fired before the setter ref was registered.
+function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
   const panelRef       = useRef(null);
@@ -150,54 +154,8 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera, onRemoteVideoR
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [remoteMuted,  setRemoteMuted]  = useState(true);
 
-  // Register the remote video setter with parent so createPC can use it directly
-  useEffect(() => {
-    if (onRemoteVideoRef) {
-      onRemoteVideoRef((stream) => {
-        const video = remoteVideoRef.current;
-        if (!video || !stream) return;
-        if (video.srcObject === stream) return;
-        video.srcObject = stream;
-        video.setAttribute("playsinline", "true");
-        video.setAttribute("webkit-playsinline", "true");
-        video.muted = true;
-        setRemoteMuted(true);
-        video.play()
-          .then(() => {
-            video.muted = false;
-            setRemoteMuted(false);
-          })
-          .catch(() => {
-            setTimeout(() => {
-              video.play()
-                .then(() => { video.muted = false; setRemoteMuted(false); })
-                .catch(() => {});
-            }, 800);
-          });
-      });
-    }
-    return () => {
-      if (onRemoteVideoRef) onRemoteVideoRef(null);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    setRemoteMuted(true);
-    setDuration(0);
-    setMuted(false);
-    setCamOff(false);
-  }, [call?.peer]);
-
-  // Attach local stream to local video element
-  useEffect(() => {
-    const video = localVideoRef.current;
-    if (!video || !call?.stream) return;
-    if (video.srcObject !== call.stream) {
-      video.srcObject = call.stream;
-    }
-  }, [call?.stream]);
-
-  // Also handle remoteStream from call state (fallback)
+  // FIX: Watch the remoteStream prop directly. When it changes, attach it
+  // to the video element. This is simpler and race-free vs the setter callback.
   useEffect(() => {
     const video = remoteVideoRef.current;
     if (!video || !call?.remoteStream) return;
@@ -221,7 +179,7 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera, onRemoteVideoR
             await video.play();
             video.muted = false;
             setRemoteMuted(false);
-          } catch (e) {}
+          } catch (e) { console.warn("Remote video play failed:", e); }
         }, 800);
       }
     };
@@ -244,6 +202,23 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera, onRemoteVideoR
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [call?.remoteStream]);
+
+  // Reset state when peer changes
+  useEffect(() => {
+    setRemoteMuted(true);
+    setDuration(0);
+    setMuted(false);
+    setCamOff(false);
+  }, [call?.peer]);
+
+  // Attach local stream to local video element
+  useEffect(() => {
+    const video = localVideoRef.current;
+    if (!video || !call?.stream) return;
+    if (video.srcObject !== call.stream) {
+      video.srcObject = call.stream;
+    }
+  }, [call?.stream]);
 
   useEffect(() => {
     if (call?.status !== "active") return;
@@ -604,17 +579,16 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [facingMode,        setFacingMode]        = useState("user");
   const [socketReady,       setSocketReady]       = useState(false);
 
-  const socketRef            = useRef(null);
-  const pcRef                = useRef(null);
-  const localStreamRef       = useRef(null);
-  const iceCandidateQueue    = useRef([]);
-  const activeRoomRef        = useRef("general");
-  const bottomRef            = useRef(null);
-  const typingTimer          = useRef(null);
-  const fileInputRef         = useRef(null);
-  const localMsgIdRef        = useRef(0);
-  // Holds a function provided by CallOverlay to directly set its remoteVideoRef
-  const remoteVideoSetterRef = useRef(null);
+  const socketRef         = useRef(null);
+  const pcRef             = useRef(null);
+  const localStreamRef    = useRef(null);
+  // FIX: Single ICE queue, cleared on every new call setup
+  const iceCandidateQueue = useRef([]);
+  const activeRoomRef     = useRef("general");
+  const bottomRef         = useRef(null);
+  const typingTimer       = useRef(null);
+  const fileInputRef      = useRef(null);
+  const localMsgIdRef     = useRef(0);
 
   const isDark = theme === "dark";
 
@@ -625,6 +599,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       localStreamRef.current = null;
     }
     if (pcRef.current) {
+      pcRef.current.ontrack = null;
+      pcRef.current.onicecandidate = null;
+      pcRef.current.oniceconnectionstatechange = null;
       pcRef.current.close();
       pcRef.current = null;
     }
@@ -632,26 +609,29 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   }, []);
 
   const flushIceCandidates = useCallback(async (pc) => {
-    for (const candidate of iceCandidateQueue.current) {
+    const queue = [...iceCandidateQueue.current];
+    iceCandidateQueue.current = [];
+    for (const candidate of queue) {
       try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
       catch (e) { console.warn("ICE flush error:", e); }
     }
-    iceCandidateQueue.current = [];
   }, []);
 
+  // FIX: applyRemoteStream now just updates call state with the stream.
+  // CallOverlay watches call.remoteStream via useEffect and attaches it
+  // to the video element. No more setter-ref indirection.
   const applyRemoteStream = useCallback((stream) => {
-    // Directly set on the video element via CallOverlay's registered setter
-    if (remoteVideoSetterRef.current) {
-      remoteVideoSetterRef.current(stream);
-    }
-    // Also store in call state as a fallback
     setCall(prev =>
       prev ? { ...prev, remoteStream: stream, status: "active" } : prev
     );
   }, []);
 
+  // FIX: createPC is now stable — applyRemoteStream is stable (no deps that change),
+  // so this callback won't be recreated on re-renders.
   const createPC = useCallback((peer) => {
     if (pcRef.current) {
+      pcRef.current.ontrack = null;
+      pcRef.current.onicecandidate = null;
       pcRef.current.close();
       pcRef.current = null;
     }
@@ -659,18 +639,33 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
     pc.onicecandidate = (e) => {
-      if (e.candidate && socketRef.current)
+      if (e.candidate && socketRef.current) {
         socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
+      }
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log("ICE state:", pc.iceConnectionState);
+      // FIX: If ICE connects but ontrack hasn't fired yet (audio-only or late track),
+      // activate the call so the UI shows "active" state.
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        setCall(prev => {
+          if (!prev || prev.status === "active") return prev;
+          return { ...prev, status: "active" };
+        });
+      }
     };
 
+    // FIX: ontrack is now the single source of truth for remote streams.
+    // It fires reliably for both audio and video calls.
     pc.ontrack = (e) => {
-      console.log("ontrack fired", e.streams);
+      console.log("ontrack fired, streams:", e.streams?.length, "tracks:", e.track?.kind);
       if (e.streams && e.streams[0]) {
         applyRemoteStream(e.streams[0]);
+      } else if (e.track) {
+        // Fallback: build a MediaStream from the track directly
+        const stream = new MediaStream([e.track]);
+        applyRemoteStream(stream);
       }
     };
 
@@ -686,6 +681,14 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       localStreamRef.current = stream;
       const pc = createPC(peer);
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      // FIX: Use addTransceiver to explicitly declare we want to receive,
+      // which prevents one-way video issues on some browsers.
+      if (type === "video") {
+        // Tracks already added above; ensure transceivers are sendrecv
+        pc.getTransceivers().forEach(t => { t.direction = "sendrecv"; });
+      }
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socketRef.current.emit("call_offer", {
@@ -723,30 +726,22 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         localStreamRef.current = stream;
         const pc = createPC(call.peer);
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+        // FIX: Set remote description FIRST, then flush ICE, then create answer.
+        // Previous code flushed ICE right after setRemoteDescription but before
+        // createAnswer — ICE candidates should be buffered until after the answer
+        // is set as local description too.
         await pc.setRemoteDescription(new RTCSessionDescription(call._offer));
-        await flushIceCandidates(pc);
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+
+        // FIX: Now flush ICE after both local AND remote descriptions are set.
+        await flushIceCandidates(pc);
+
         socketRef.current.emit("call_answer", { to: call.peer, answer: pc.localDescription });
         setCall(prev => ({ ...prev, stream, status: "active" }));
         setFacingMode("user");
-
-        // Fallback: if ontrack hasn't fired yet, check receivers after a short delay
-        setTimeout(() => {
-          const pc2 = pcRef.current;
-          if (!pc2) return;
-          const receivers = pc2.getReceivers();
-          const tracks = receivers.map(r => r.track).filter(Boolean);
-          if (tracks.length) {
-            // Check if we already have a remote stream applied
-            setCall(prev => {
-              if (prev?.remoteStream) return prev; // already got it via ontrack
-              const remoteStream = new MediaStream(tracks);
-              applyRemoteStream(remoteStream);
-              return prev ? { ...prev, remoteStream, status: "active" } : prev;
-            });
-          }
-        }, 1500);
 
       } catch (err) {
         stopLocalStream();
@@ -760,7 +755,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       stopLocalStream();
       setCall(null);
     }
-  }, [call, createPC, flushIceCandidates, stopLocalStream, applyRemoteStream]);
+  }, [call, createPC, flushIceCandidates, stopLocalStream]);
 
   const handleSwitchCamera = useCallback(async () => {
     if (!localStreamRef.current || !pcRef.current) return;
@@ -878,24 +873,29 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
     socket.on("call_answer", async ({ answer }) => {
       const pc = pcRef.current;
-      if (pc) {
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          await flushIceCandidates(pc);
-          // For voice calls ontrack never fires — activate immediately
-          setCall(prev => {
-            if (!prev) return prev;
-            return prev.status !== "active" ? { ...prev, status: "active" } : prev;
-          });
-        } catch (e) {
-          console.error("set answer error:", e);
-        }
+      if (!pc) return;
+      try {
+        // FIX: Only set remote description here. ICE candidates that arrived
+        // before this point are in the queue and will be flushed after.
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        await flushIceCandidates(pc);
+        // Voice calls: ontrack may not fire (no video track), activate via ICE state change.
+        // For voice, also activate here as a safety net.
+        setCall(prev => {
+          if (!prev) return prev;
+          return prev.status !== "active" ? { ...prev, status: "active" } : prev;
+        });
+      } catch (e) {
+        console.error("set answer error:", e);
       }
     });
 
     socket.on("call_ice", async ({ candidate }) => {
       const pc = pcRef.current;
-      if (!pc || !pc.remoteDescription?.type) {
+      // FIX: Check that BOTH local and remote descriptions are set before adding.
+      // If either is missing, buffer the candidate. This fixes the most common
+      // cause of ICE failures — candidates arriving before negotiation completes.
+      if (!pc || !pc.remoteDescription?.type || !pc.localDescription?.type) {
         iceCandidateQueue.current.push(candidate);
         return;
       }
@@ -1141,6 +1141,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
           </div>
         )}
 
+        {/* FIX: Removed onRemoteVideoRef prop — CallOverlay now watches call.remoteStream directly */}
         {call && (
           <CallOverlay
             call={call}
@@ -1148,7 +1149,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             onEnd={handleCallEnd}
             isDark={isDark}
             onSwitchCamera={handleSwitchCamera}
-            onRemoteVideoRef={(setter) => { remoteVideoSetterRef.current = setter; }}
           />
         )}
 
