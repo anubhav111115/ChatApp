@@ -158,64 +158,59 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     setCamOff(false);
   }, [call?.peer]);
 
-  useEffect(() => {
-    const video = localVideoRef.current;
-    if (!video || !call?.stream) return;
-    video.srcObject = call.stream;
-    video.muted = true;
-    video.setAttribute("playsinline", "true");
-    video.setAttribute("webkit-playsinline", "true");
-    video.play().catch(() => {});
-  }, [call?.stream]);
+  // In CallOverlay, replace the remoteStream useEffect with this:
+useEffect(() => {
+  const video = remoteVideoRef.current;
+  if (!video) return;
 
-  useEffect(() => {
-    const video = remoteVideoRef.current;
-    if (!video || !call?.remoteStream) return;
+  // Use whichever stream is available — from state or already on element
+  const stream = call?.remoteStream || video.srcObject;
+  if (!stream) return;
 
-    video.srcObject = call.remoteStream;
-    video.setAttribute("playsinline", "true");
-    video.setAttribute("webkit-playsinline", "true");
+  if (video.srcObject !== stream) {
+    video.srcObject = stream;
+  }
 
-    const tryPlay = async () => {
-      try {
-        video.muted = true;
-        setRemoteMuted(true);
-        await video.play();
-        video.muted = false;
-        setRemoteMuted(false);
-      } catch (err) {
-        console.error("Remote play error:", err);
-        setTimeout(async () => {
-          try {
-            video.muted = true;
-            await video.play();
-            video.muted = false;
-            setRemoteMuted(false);
-          } catch (e) {
-            console.error("Remote play retry failed:", e);
-          }
-        }, 800);
-      }
-    };
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
 
-    if (video.readyState >= 2) {
-      tryPlay();
-    } else {
-      video.onloadedmetadata = tryPlay;
+  const tryPlay = async () => {
+    try {
+      video.muted = true;
+      setRemoteMuted(true);
+      await video.play();
+      video.muted = false;
+      setRemoteMuted(false);
+    } catch (err) {
+      setTimeout(async () => {
+        try {
+          video.muted = true;
+          await video.play();
+          video.muted = false;
+          setRemoteMuted(false);
+        } catch (e) {}
+      }, 800);
     }
+  };
 
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible" && video.paused) {
-        video.play().catch(() => {});
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
+  if (video.readyState >= 2) {
+    tryPlay();
+  } else {
+    video.onloadedmetadata = tryPlay;
+  }
 
-    return () => {
-      video.onloadedmetadata = null;
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [call?.remoteStream]);
+  const handleVisibility = () => {
+    if (document.visibilityState === "visible" && video.paused) {
+      video.play().catch(() => {});
+    }
+  };
+  document.addEventListener("visibilitychange", handleVisibility);
+
+  return () => {
+    video.onloadedmetadata = null;
+    document.removeEventListener("visibilitychange", handleVisibility);
+  };
+}, [call?.remoteStream]);
 
   useEffect(() => {
     if (call?.status !== "active") return;
@@ -620,30 +615,41 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       pcRef.current.close();
       pcRef.current = null;
     }
-
+  
     const pc = new RTCPeerConnection(ICE_SERVERS);
-
+  
     pc.onicecandidate = (e) => {
       if (e.candidate && socketRef.current)
         socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
     };
-
+  
     pc.oniceconnectionstatechange = () => {
       console.log("ICE state:", pc.iceConnectionState);
-      if (pc.iceConnectionState === "failed") {
-        console.error("ICE connection failed");
-      }
     };
-
+  
     pc.ontrack = (e) => {
-      console.log("Remote stream received:", e.streams);
+      console.log("ontrack fired", e.streams);
       if (e.streams && e.streams[0]) {
+        const remoteStream = e.streams[0];
+  
+        // ── FIX: directly assign to video element immediately,
+        //    don't wait for React state → useEffect chain which may miss it
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.muted = true;
+          remoteVideoRef.current.play()
+            .then(() => {
+              remoteVideoRef.current.muted = false;
+            })
+            .catch(() => {});
+        }
+  
         setCall(prev =>
-          prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev
+          prev ? { ...prev, remoteStream, status: "active" } : prev
         );
       }
     };
-
+  
     pcRef.current = pc;
     return pc;
   }, []);
@@ -700,6 +706,23 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         socketRef.current.emit("call_answer", { to: call.peer, answer: pc.localDescription });
         setCall(prev => ({ ...prev, stream, status: "active" }));
         setFacingMode("user");
+  
+        // ── FIX: ontrack may fire before setCall propagates on answerer side.
+        //    Check if remote stream is already on the pc receivers and attach it.
+        setTimeout(() => {
+          const receivers = pc.getReceivers();
+          const videoReceiver = receivers.find(r => r.track?.kind === "video");
+          if (videoReceiver && remoteVideoRef.current && !remoteVideoRef.current.srcObject) {
+            const remoteStream = new MediaStream(receivers.map(r => r.track).filter(Boolean));
+            remoteVideoRef.current.srcObject = remoteStream;
+            remoteVideoRef.current.muted = true;
+            remoteVideoRef.current.play()
+              .then(() => { remoteVideoRef.current.muted = false; })
+              .catch(() => {});
+            setCall(prev => prev ? { ...prev, remoteStream, status: "active" } : prev);
+          }
+        }, 1000);
+  
       } catch (err) {
         stopLocalStream();
         setCall(null);
