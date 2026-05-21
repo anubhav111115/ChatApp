@@ -28,7 +28,6 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-// ─── FIX 3: Date separator helper ─────────────────────────────────────────────
 function getDateLabel(dateStr) {
   const d = new Date(dateStr);
   const today = new Date();
@@ -140,7 +139,7 @@ function EmojiPicker({ onSelect, onClose }) {
 }
 
 // ─── CALL OVERLAY ─────────────────────────────────────────────────────────────
-function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
+function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera, onRemoteVideoRef }) {
   const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
   const panelRef       = useRef(null);
@@ -151,6 +150,37 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [remoteMuted,  setRemoteMuted]  = useState(true);
 
+  // Register the remote video setter with parent so createPC can use it directly
+  useEffect(() => {
+    if (onRemoteVideoRef) {
+      onRemoteVideoRef((stream) => {
+        const video = remoteVideoRef.current;
+        if (!video || !stream) return;
+        if (video.srcObject === stream) return;
+        video.srcObject = stream;
+        video.setAttribute("playsinline", "true");
+        video.setAttribute("webkit-playsinline", "true");
+        video.muted = true;
+        setRemoteMuted(true);
+        video.play()
+          .then(() => {
+            video.muted = false;
+            setRemoteMuted(false);
+          })
+          .catch(() => {
+            setTimeout(() => {
+              video.play()
+                .then(() => { video.muted = false; setRemoteMuted(false); })
+                .catch(() => {});
+            }, 800);
+          });
+      });
+    }
+    return () => {
+      if (onRemoteVideoRef) onRemoteVideoRef(null);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     setRemoteMuted(true);
     setDuration(0);
@@ -158,59 +188,62 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     setCamOff(false);
   }, [call?.peer]);
 
-  // In CallOverlay, replace the remoteStream useEffect with this:
-useEffect(() => {
-  const video = remoteVideoRef.current;
-  if (!video) return;
-
-  // Use whichever stream is available — from state or already on element
-  const stream = call?.remoteStream || video.srcObject;
-  if (!stream) return;
-
-  if (video.srcObject !== stream) {
-    video.srcObject = stream;
-  }
-
-  video.setAttribute("playsinline", "true");
-  video.setAttribute("webkit-playsinline", "true");
-
-  const tryPlay = async () => {
-    try {
-      video.muted = true;
-      setRemoteMuted(true);
-      await video.play();
-      video.muted = false;
-      setRemoteMuted(false);
-    } catch (err) {
-      setTimeout(async () => {
-        try {
-          video.muted = true;
-          await video.play();
-          video.muted = false;
-          setRemoteMuted(false);
-        } catch (e) {}
-      }, 800);
+  // Attach local stream to local video element
+  useEffect(() => {
+    const video = localVideoRef.current;
+    if (!video || !call?.stream) return;
+    if (video.srcObject !== call.stream) {
+      video.srcObject = call.stream;
     }
-  };
+  }, [call?.stream]);
 
-  if (video.readyState >= 2) {
-    tryPlay();
-  } else {
-    video.onloadedmetadata = tryPlay;
-  }
+  // Also handle remoteStream from call state (fallback)
+  useEffect(() => {
+    const video = remoteVideoRef.current;
+    if (!video || !call?.remoteStream) return;
+    if (video.srcObject === call.remoteStream) return;
 
-  const handleVisibility = () => {
-    if (document.visibilityState === "visible" && video.paused) {
-      video.play().catch(() => {});
+    video.srcObject = call.remoteStream;
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+
+    const tryPlay = async () => {
+      try {
+        video.muted = true;
+        setRemoteMuted(true);
+        await video.play();
+        video.muted = false;
+        setRemoteMuted(false);
+      } catch {
+        setTimeout(async () => {
+          try {
+            video.muted = true;
+            await video.play();
+            video.muted = false;
+            setRemoteMuted(false);
+          } catch (e) {}
+        }, 800);
+      }
+    };
+
+    if (video.readyState >= 2) {
+      tryPlay();
+    } else {
+      video.onloadedmetadata = tryPlay;
     }
-  };
-  document.addEventListener("visibilitychange", handleVisibility);
 
-  return () => {
-    video.onloadedmetadata = null;
-    document.removeEventListener("visibilitychange", handleVisibility);
-  };
-}, [call?.remoteStream]);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && video.paused) {
+        video.play().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      video.onloadedmetadata = null;
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [call?.remoteStream]);
 
   useEffect(() => {
     if (call?.status !== "active") return;
@@ -255,16 +288,16 @@ useEffect(() => {
 
   const doEnterFullscreen = (el) => {
     if (!el) return;
-    if      (el.requestFullscreen)            el.requestFullscreen();
-    else if (el.webkitRequestFullscreen)      el.webkitRequestFullscreen();
-    else if (el.webkitEnterFullscreen)        el.webkitEnterFullscreen();
-    else if (el.mozRequestFullScreen)         el.mozRequestFullScreen();
+    if      (el.requestFullscreen)       el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (el.webkitEnterFullscreen)   el.webkitEnterFullscreen();
+    else if (el.mozRequestFullScreen)    el.mozRequestFullScreen();
   };
 
   const doExitFullscreen = () => {
-    if      (document.exitFullscreen)             document.exitFullscreen();
-    else if (document.webkitExitFullscreen)       document.webkitExitFullscreen();
-    else if (document.mozCancelFullScreen)        document.mozCancelFullScreen();
+    if      (document.exitFullscreen)       document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    else if (document.mozCancelFullScreen)  document.mozCancelFullScreen();
   };
 
   const toggleFullscreen = () => {
@@ -272,11 +305,7 @@ useEffect(() => {
       doExitFullscreen();
     } else {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      if (isIOS) {
-        doEnterFullscreen(remoteVideoRef.current);
-      } else {
-        doEnterFullscreen(panelRef.current);
-      }
+      doEnterFullscreen(isIOS ? remoteVideoRef.current : panelRef.current);
     }
   };
 
@@ -575,17 +604,17 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const [facingMode,        setFacingMode]        = useState("user");
   const [socketReady,       setSocketReady]       = useState(false);
 
-  const socketRef         = useRef(null);
-  const pcRef             = useRef(null);
-  const localStreamRef    = useRef(null);
-  const iceCandidateQueue = useRef([]);
-  const activeRoomRef     = useRef("general");
-  const bottomRef         = useRef(null);
-  const typingTimer       = useRef(null);
-  const fileInputRef      = useRef(null);
-
-  // ── FIX 1: Unique local ID counter so dedup always matches ─────────────────
-  const localMsgIdRef = useRef(0);
+  const socketRef            = useRef(null);
+  const pcRef                = useRef(null);
+  const localStreamRef       = useRef(null);
+  const iceCandidateQueue    = useRef([]);
+  const activeRoomRef        = useRef("general");
+  const bottomRef            = useRef(null);
+  const typingTimer          = useRef(null);
+  const fileInputRef         = useRef(null);
+  const localMsgIdRef        = useRef(0);
+  // Holds a function provided by CallOverlay to directly set its remoteVideoRef
+  const remoteVideoSetterRef = useRef(null);
 
   const isDark = theme === "dark";
 
@@ -610,49 +639,44 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     iceCandidateQueue.current = [];
   }, []);
 
+  const applyRemoteStream = useCallback((stream) => {
+    // Directly set on the video element via CallOverlay's registered setter
+    if (remoteVideoSetterRef.current) {
+      remoteVideoSetterRef.current(stream);
+    }
+    // Also store in call state as a fallback
+    setCall(prev =>
+      prev ? { ...prev, remoteStream: stream, status: "active" } : prev
+    );
+  }, []);
+
   const createPC = useCallback((peer) => {
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
     }
-  
+
     const pc = new RTCPeerConnection(ICE_SERVERS);
-  
+
     pc.onicecandidate = (e) => {
       if (e.candidate && socketRef.current)
         socketRef.current.emit("call_ice", { to: peer, candidate: e.candidate });
     };
-  
+
     pc.oniceconnectionstatechange = () => {
       console.log("ICE state:", pc.iceConnectionState);
     };
-  
+
     pc.ontrack = (e) => {
       console.log("ontrack fired", e.streams);
       if (e.streams && e.streams[0]) {
-        const remoteStream = e.streams[0];
-  
-        // ── FIX: directly assign to video element immediately,
-        //    don't wait for React state → useEffect chain which may miss it
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-          remoteVideoRef.current.muted = true;
-          remoteVideoRef.current.play()
-            .then(() => {
-              remoteVideoRef.current.muted = false;
-            })
-            .catch(() => {});
-        }
-  
-        setCall(prev =>
-          prev ? { ...prev, remoteStream, status: "active" } : prev
-        );
+        applyRemoteStream(e.streams[0]);
       }
     };
-  
+
     pcRef.current = pc;
     return pc;
-  }, []);
+  }, [applyRemoteStream]);
 
   const startCall = useCallback(async (peer, type) => {
     if (call) return;
@@ -706,23 +730,24 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         socketRef.current.emit("call_answer", { to: call.peer, answer: pc.localDescription });
         setCall(prev => ({ ...prev, stream, status: "active" }));
         setFacingMode("user");
-  
-        // ── FIX: ontrack may fire before setCall propagates on answerer side.
-        //    Check if remote stream is already on the pc receivers and attach it.
+
+        // Fallback: if ontrack hasn't fired yet, check receivers after a short delay
         setTimeout(() => {
-          const receivers = pc.getReceivers();
-          const videoReceiver = receivers.find(r => r.track?.kind === "video");
-          if (videoReceiver && remoteVideoRef.current && !remoteVideoRef.current.srcObject) {
-            const remoteStream = new MediaStream(receivers.map(r => r.track).filter(Boolean));
-            remoteVideoRef.current.srcObject = remoteStream;
-            remoteVideoRef.current.muted = true;
-            remoteVideoRef.current.play()
-              .then(() => { remoteVideoRef.current.muted = false; })
-              .catch(() => {});
-            setCall(prev => prev ? { ...prev, remoteStream, status: "active" } : prev);
+          const pc2 = pcRef.current;
+          if (!pc2) return;
+          const receivers = pc2.getReceivers();
+          const tracks = receivers.map(r => r.track).filter(Boolean);
+          if (tracks.length) {
+            // Check if we already have a remote stream applied
+            setCall(prev => {
+              if (prev?.remoteStream) return prev; // already got it via ontrack
+              const remoteStream = new MediaStream(tracks);
+              applyRemoteStream(remoteStream);
+              return prev ? { ...prev, remoteStream, status: "active" } : prev;
+            });
           }
-        }, 1000);
-  
+        }, 1500);
+
       } catch (err) {
         stopLocalStream();
         setCall(null);
@@ -735,7 +760,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       stopLocalStream();
       setCall(null);
     }
-  }, [call, createPC, flushIceCandidates, stopLocalStream]);
+  }, [call, createPC, flushIceCandidates, stopLocalStream, applyRemoteStream]);
 
   const handleSwitchCamera = useCallback(async () => {
     if (!localStreamRef.current || !pcRef.current) return;
@@ -796,7 +821,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username]);
 
-  // ── FIX 1: Messages — dedup by _localId tag, not fragile field matching ─────
+  // ── Messages ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket || !socketReady) return;
@@ -804,13 +829,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     const handleMessage = (msg) => {
       if (msg.room === activeRoomRef.current) {
         setMessages(prev => {
-          // Remove the local optimistic copy using the _localId echo the server
-          // should reflect back; if server doesn't echo it, fall back to removing
-          // any pending local message from the same sender with the same text+file.
           const filtered = prev.filter(m => {
             if (!m._isLocal) return true;
             if (m.sender !== msg.sender) return true;
-            // Match by _localId if server echoes it, otherwise by content
             if (msg._localId && m._localId) return m._localId !== msg._localId;
             const sameText = m.message === msg.message;
             const sameFile = (m.fileData?.name ?? null) === (msg.fileData?.name ?? null);
@@ -845,7 +866,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username, socketReady]);
 
-  // ── FIX 2: Call signaling — voice calls activate immediately on answer ───────
+  // ── Call signaling ────────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
@@ -861,12 +882,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
           await flushIceCandidates(pc);
-          // FIX 2: For voice calls, ontrack may never fire (no video track).
-          // Activate immediately after remote description is set + ICE flushed.
-          // For video calls, ontrack will fire and also set status to active — idempotent.
+          // For voice calls ontrack never fires — activate immediately
           setCall(prev => {
             if (!prev) return prev;
-            // Only force-activate if still pending (not already active via ontrack)
             return prev.status !== "active" ? { ...prev, status: "active" } : prev;
           });
         } catch (e) {
@@ -898,7 +916,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [flushIceCandidates, stopLocalStream]);
 
-  // ── Socket: room ────────────────────────────────────────────────────────────
+  // ── Room switching ────────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
@@ -932,7 +950,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // ── Room switching ───────────────────────────────────────────────────────────
   const switchRoom = (roomId, roomName) => {
     setActiveRoom(roomId);
     setActiveRoomName(roomName);
@@ -1025,7 +1042,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const addEmoji = (emoji) => setText(prev => prev + emoji);
 
-  // ── FIX 1: sendMessage — tag local msg with _localId, include it in emit ────
   const sendMessage = () => {
     if (attachmentLoading) return;
     if (!text.trim() && !attachment) return;
@@ -1040,7 +1056,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       sender: user.username,
       room: activeRoom,
       message: text.trim(),
-      _localId: localId, // echoed back by server if it reflects it; used for dedup
+      _localId: localId,
     };
 
     if (attachment) {
@@ -1068,12 +1084,11 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     setShowEmojiPicker(false);
     socketRef.current.emit("send_message", msgData);
 
-    // FIX 1: Safety net — if server echo doesn't arrive within 8s, resolve it anyway
     setTimeout(() => {
       setMessages(prev =>
         prev.map(m =>
           m._localId === localId && m._isLocal
-            ? { ...m, _isLocal: false, time: m.time } // keep time, just stop "sending…"
+            ? { ...m, _isLocal: false }
             : m
         )
       );
@@ -1103,7 +1118,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   );
   const showGeneral = "general chat".includes(search.toLowerCase()) || search === "";
 
-  // ── FIX 3: Build message list with date separators ──────────────────────────
+  // Build message list with date separators
   const messagesWithDates = [];
   let lastDateLabel = null;
   for (const msg of messages) {
@@ -1133,6 +1148,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
             onEnd={handleCallEnd}
             isDark={isDark}
             onSwitchCamera={handleSwitchCamera}
+            onRemoteVideoRef={(setter) => { remoteVideoSetterRef.current = setter; }}
           />
         )}
 
@@ -1310,9 +1326,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
               </div>
             )}
 
-            {/* ── FIX 3: Render messages with date separators ─────────────── */}
             {messagesWithDates.map((item, i) => {
-              // Date separator row
               if (item._isDateSep) {
                 return (
                   <div key={item._id} className="date-separator">
@@ -1325,7 +1339,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
               const msg       = item;
               const mine      = msg.sender === user.username;
-              // For showName/showAv, look at prev/next real messages only
               const realMsgs  = messagesWithDates.filter(m => !m._isDateSep);
               const myIndex   = realMsgs.findIndex(m => m === msg);
               const showName  = myIndex === 0 || realMsgs[myIndex - 1]?.sender !== msg.sender;
