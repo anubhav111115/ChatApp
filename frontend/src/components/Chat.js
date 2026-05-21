@@ -934,9 +934,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const MAX_SIZE = 5 * 1024 * 1024;
+    const MAX_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      alert(`File too large (max 5MB).\nYour file: ${formatBytes(file.size)}`);
+      alert(`File too large (max 10MB).\nYour file: ${formatBytes(file.size)}`);
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
