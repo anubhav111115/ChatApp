@@ -28,6 +28,23 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+// ─── FIX 3: Date separator helper ─────────────────────────────────────────────
+function getDateLabel(dateStr) {
+  const d = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (sameDay(d, today)) return "Today";
+  if (sameDay(d, yesterday)) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+}
+
 const getMediaConstraints = (type) => ({
   audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
   video: type === "video"
@@ -123,24 +140,10 @@ function EmojiPicker({ onSelect, onClose }) {
 }
 
 // ─── CALL OVERLAY ─────────────────────────────────────────────────────────────
-// All fixes applied:
-//  ✅ FIX 1 — Local video srcObject assigned via useEffect watching call.stream
-//  ✅ FIX 2 — visibilitychange handler resumes remote video on iOS tab-switch
-//  ✅ FIX 3 — Remote video: play muted → unmute (beats iOS/Android autoplay block)
-//  ✅ FIX 4 — Fullscreen targets .call-panel div (not the backdrop); uses CSS
-//             :fullscreen pseudo-class for styling, not a JS-toggled class
-//  ✅ FIX 5 — Local preview shows while outgoing call is pending (only remote hidden)
-//  ✅ FIX 6 — call-video-wrap gets position:relative via inline style so absolute
-//             children (fullscreen-btn, unmute-badge) position correctly
-//  ✅ FIX 7 — Double-tap handled manually for mobile (two touches within 300ms)
-//  ✅ FIX 8 — remoteMuted resets to true whenever call changes (new call = re-mute)
-//  ✅ FIX 9 — Clear enter/exit fullscreen icons (⛶ enter, ✕ / ⊡ exit)
-//  ✅ FIX 10 — Socket.io pingInterval/pingTimeout tuned in connection options
-
 function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
-  const panelRef       = useRef(null); // ← fullscreen target is the PANEL, not backdrop
+  const panelRef       = useRef(null);
 
   const [duration,     setDuration]     = useState(0);
   const [muted,        setMuted]        = useState(false);
@@ -148,7 +151,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [remoteMuted,  setRemoteMuted]  = useState(true);
 
-  // Reset remoteMuted whenever a new call starts
   useEffect(() => {
     setRemoteMuted(true);
     setDuration(0);
@@ -156,7 +158,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     setCamOff(false);
   }, [call?.peer]);
 
-  // ── FIX 1: Attach LOCAL stream ──────────────────────────────────────────────
   useEffect(() => {
     const video = localVideoRef.current;
     if (!video || !call?.stream) return;
@@ -167,7 +168,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     video.play().catch(() => {});
   }, [call?.stream]);
 
-  // ── FIX 3 + 2: Attach REMOTE stream with muted-first + visibilitychange ────
   useEffect(() => {
     const video = remoteVideoRef.current;
     if (!video || !call?.remoteStream) return;
@@ -181,12 +181,10 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
         video.muted = true;
         setRemoteMuted(true);
         await video.play();
-        // Unmute right after successful play
         video.muted = false;
         setRemoteMuted(false);
       } catch (err) {
         console.error("Remote play error:", err);
-        // Retry once after short delay (Android timing)
         setTimeout(async () => {
           try {
             video.muted = true;
@@ -195,7 +193,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
             setRemoteMuted(false);
           } catch (e) {
             console.error("Remote play retry failed:", e);
-            // Leave the unmute badge visible so user can tap
           }
         }, 800);
       }
@@ -207,7 +204,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
       video.onloadedmetadata = tryPlay;
     }
 
-    // FIX 2: Resume video when user comes back to the tab (iOS Safari pauses it)
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && video.paused) {
         video.play().catch(() => {});
@@ -221,14 +217,12 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     };
   }, [call?.remoteStream]);
 
-  // ── Timer ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (call?.status !== "active") return;
     const t = setInterval(() => setDuration(d => d + 1), 1000);
     return () => clearInterval(t);
   }, [call?.status]);
 
-  // ── FIX 4: Fullscreen change listener ──────────────────────────────────────
   useEffect(() => {
     const onChange = () => {
       const fsEl =
@@ -264,12 +258,11 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     }
   };
 
-  // ── FIX 4: Fullscreen targets panelRef (.call-panel), not the backdrop ──────
   const doEnterFullscreen = (el) => {
     if (!el) return;
     if      (el.requestFullscreen)            el.requestFullscreen();
     else if (el.webkitRequestFullscreen)      el.webkitRequestFullscreen();
-    else if (el.webkitEnterFullscreen)        el.webkitEnterFullscreen(); // iOS <video>
+    else if (el.webkitEnterFullscreen)        el.webkitEnterFullscreen();
     else if (el.mozRequestFullScreen)         el.mozRequestFullScreen();
   };
 
@@ -284,7 +277,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
       doExitFullscreen();
     } else {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // iOS Safari can only fullscreen a <video> element directly
       if (isIOS) {
         doEnterFullscreen(remoteVideoRef.current);
       } else {
@@ -293,7 +285,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
     }
   };
 
-  // ── FIX 7: Manual double-tap for mobile fullscreen ──────────────────────────
   const lastTapRef = useRef(0);
   const handleTouchEnd = (e) => {
     const now = Date.now();
@@ -312,12 +303,10 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
   const isVideo    = call?.type === "video";
   const isIncoming = call?.direction === "incoming";
   const isPending  = call?.status === "pending";
-  // FIX 5: Only hide remote video while pending — local preview always visible
   const hideRemote = isPending;
 
   return (
     <div className="call-overlay">
-      {/* FIX 4: panelRef here, not on the backdrop */}
       <div
         ref={panelRef}
         className={`call-panel ${isDark ? "dark" : "light"}`}
@@ -325,11 +314,10 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
         {isVideo ? (
           <div
             className="call-video-wrap"
-            style={{ position: "relative" }}         // FIX 6: needed for absolute children
-            onDoubleClick={toggleFullscreen}          // desktop double-click
-            onTouchEnd={handleTouchEnd}               // FIX 7: mobile double-tap
+            style={{ position: "relative" }}
+            onDoubleClick={toggleFullscreen}
+            onTouchEnd={handleTouchEnd}
           >
-            {/* Remote video — always in DOM so ref is always valid */}
             <video
               ref={remoteVideoRef}
               autoPlay
@@ -339,8 +327,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               className="call-remote-video"
               style={{ display: hideRemote ? "none" : "block" }}
             />
-
-            {/* Local (self-view) video — visible even while outgoing pending */}
             <video
               ref={localVideoRef}
               autoPlay
@@ -349,8 +335,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               webkit-playsinline="true"
               className="call-local-video"
             />
-
-            {/* FIX 9: Distinct icons for enter / exit fullscreen */}
             {call?.status === "active" && (
               <button
                 className="fullscreen-btn"
@@ -361,8 +345,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
                 {isFullscreen ? "⊡" : "⛶"}
               </button>
             )}
-
-            {/* Unmute fallback — shown if autoplay muted got stuck */}
             {remoteMuted && call?.status === "active" && (
               <button className="unmute-badge" onClick={handleUnmute}>
                 🔇 Tap to unmute
@@ -402,7 +384,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               >
                 {muted ? "🔇" : "🎤"}
               </button>
-
               {isVideo && (
                 <>
                   <button
@@ -430,7 +411,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               )}
             </>
           )}
-
           {isPending && isIncoming && (
             <button
               className="call-ctrl-btn accept"
@@ -440,7 +420,6 @@ function CallOverlay({ call, user, onEnd, isDark, onSwitchCamera }) {
               ✓
             </button>
           )}
-
           <button
             className="call-ctrl-btn end"
             onClick={() => onEnd("end")}
@@ -610,6 +589,9 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
   const typingTimer       = useRef(null);
   const fileInputRef      = useRef(null);
 
+  // ── FIX 1: Unique local ID counter so dedup always matches ─────────────────
+  const localMsgIdRef = useRef(0);
+
   const isDark = theme === "dark";
 
   // ── WebRTC helpers ──────────────────────────────────────────────────────────
@@ -648,7 +630,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
     pc.oniceconnectionstatechange = () => {
       console.log("ICE state:", pc.iceConnectionState);
-      // If ICE fails, surface it to the user
       if (pc.iceConnectionState === "failed") {
         console.error("ICE connection failed");
       }
@@ -657,14 +638,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     pc.ontrack = (e) => {
       console.log("Remote stream received:", e.streams);
       if (e.streams && e.streams[0]) {
-        console.log(
-          "Remote tracks:",
-          e.streams[0].getTracks().map(t => ({
-            kind: t.kind,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          }))
-        );
         setCall(prev =>
           prev ? { ...prev, remoteStream: e.streams[0], status: "active" } : prev
         );
@@ -680,7 +653,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     iceCandidateQueue.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(type));
-      console.log("Got local tracks:", stream.getTracks().map(t => t.kind));
       localStreamRef.current = stream;
       const pc = createPC(peer);
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -718,7 +690,6 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       iceCandidateQueue.current = [];
       try {
         const stream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(call.type));
-        console.log("Answer local tracks:", stream.getTracks().map(t => t.kind));
         localStreamRef.current = stream;
         const pc = createPC(call.peer);
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -770,32 +741,23 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     }
   }, [facingMode]);
 
-  // ── FIX 10: Socket with tuned ping timings for Render.com free tier ─────────
+  // ── Socket connection ────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = io(BACKEND_URL, {
       transports: ["websocket", "polling"],
       maxHttpBufferSize: 10 * 1024 * 1024,
-      pingInterval: 10000,   // ping every 10s (default 25s — too slow for Render)
-      pingTimeout:  20000,   // wait 20s for pong before disconnecting
+      pingInterval: 10000,
+      pingTimeout:  20000,
     });
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("Socket connected:", socket.id);
       socket.emit("user_online", { username: user.username });
       setSocketReady(true);
     });
 
-    socket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", reason);
-      setSocketReady(false);
-    });
+    socket.on("disconnect", () => setSocketReady(false));
 
-    socket.on("connect_error", (err) => {
-      console.error("Socket connect error:", err.message);
-    });
-
-    // Heartbeat to keep Render.com free instance alive
     const interval = setInterval(() => {
       if (socket.connected) socket.emit("user_online", { username: user.username });
     }, 5000);
@@ -811,7 +773,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username]);
 
-  // ── Socket: messages ────────────────────────────────────────────────────────
+  // ── FIX 1: Messages — dedup by _localId tag, not fragile field matching ─────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket || !socketReady) return;
@@ -819,15 +781,18 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     const handleMessage = (msg) => {
       if (msg.room === activeRoomRef.current) {
         setMessages(prev => {
-          const filtered = prev.filter(
-            m =>
-              !(
-                m._isLocal &&
-                m.sender === msg.sender &&
-                m.message === msg.message &&
-                (m.fileData?.name ?? null) === (msg.fileData?.name ?? null)
-              )
-          );
+          // Remove the local optimistic copy using the _localId echo the server
+          // should reflect back; if server doesn't echo it, fall back to removing
+          // any pending local message from the same sender with the same text+file.
+          const filtered = prev.filter(m => {
+            if (!m._isLocal) return true;
+            if (m.sender !== msg.sender) return true;
+            // Match by _localId if server echoes it, otherwise by content
+            if (msg._localId && m._localId) return m._localId !== msg._localId;
+            const sameText = m.message === msg.message;
+            const sameFile = (m.fileData?.name ?? null) === (msg.fileData?.name ?? null);
+            return !(sameText && sameFile);
+          });
           return [...filtered, { ...msg, time: getTime(), _isLocal: false }];
         });
       } else if (msg.sender !== user.username) {
@@ -857,7 +822,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     };
   }, [user.username, socketReady]);
 
-  // ── Socket: call signaling ──────────────────────────────────────────────────
+  // ── FIX 2: Call signaling — voice calls activate immediately on answer ───────
   useEffect(() => {
     const socket = socketRef.current;
     if (!socket) return;
@@ -873,8 +838,14 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
           await flushIceCandidates(pc);
-          // Caller side: voice calls may never fire ontrack, so force active here
-          setCall(prev => prev ? { ...prev, status: "active" } : prev);
+          // FIX 2: For voice calls, ontrack may never fire (no video track).
+          // Activate immediately after remote description is set + ICE flushed.
+          // For video calls, ontrack will fire and also set status to active — idempotent.
+          setCall(prev => {
+            if (!prev) return prev;
+            // Only force-activate if still pending (not already active via ontrack)
+            return prev.status !== "active" ? { ...prev, status: "active" } : prev;
+          });
         } catch (e) {
           console.error("set answer error:", e);
         }
@@ -1031,6 +1002,7 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
   const addEmoji = (emoji) => setText(prev => prev + emoji);
 
+  // ── FIX 1: sendMessage — tag local msg with _localId, include it in emit ────
   const sendMessage = () => {
     if (attachmentLoading) return;
     if (!text.trim() && !attachment) return;
@@ -1039,10 +1011,13 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
       return;
     }
 
+    const localId = `local_${++localMsgIdRef.current}_${Date.now()}`;
+
     const msgData = {
       sender: user.username,
       room: activeRoom,
       message: text.trim(),
+      _localId: localId, // echoed back by server if it reflects it; used for dedup
     };
 
     if (attachment) {
@@ -1057,16 +1032,29 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
 
     const localMsg = {
       ...msgData,
-      _id: `local_${Date.now()}`,
+      _id: localId,
       _isLocal: true,
+      _localId: localId,
       time: getTime(),
       createdAt: new Date().toISOString(),
     };
+
     setMessages(prev => [...prev, localMsg]);
     setText("");
     setAttachment(null);
     setShowEmojiPicker(false);
     socketRef.current.emit("send_message", msgData);
+
+    // FIX 1: Safety net — if server echo doesn't arrive within 8s, resolve it anyway
+    setTimeout(() => {
+      setMessages(prev =>
+        prev.map(m =>
+          m._localId === localId && m._isLocal
+            ? { ...m, _isLocal: false, time: m.time } // keep time, just stop "sending…"
+            : m
+        )
+      );
+    }, 8000);
   };
 
   const startEdit = (msg) => { setEditingMsg(msg._id); setEditText(msg.message); };
@@ -1091,6 +1079,18 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
     u.toLowerCase().includes(search.toLowerCase())
   );
   const showGeneral = "general chat".includes(search.toLowerCase()) || search === "";
+
+  // ── FIX 3: Build message list with date separators ──────────────────────────
+  const messagesWithDates = [];
+  let lastDateLabel = null;
+  for (const msg of messages) {
+    const label = msg.createdAt ? getDateLabel(msg.createdAt) : null;
+    if (label && label !== lastDateLabel) {
+      messagesWithDates.push({ _isDateSep: true, label, _id: `datesep_${label}` });
+      lastDateLabel = label;
+    }
+    messagesWithDates.push(msg);
+  }
 
   return (
     <div className={`chat-bg ${isDark ? "dark" : "light"}`}>
@@ -1287,10 +1287,26 @@ function Chat({ user, onLogout, theme, toggleTheme }) {
               </div>
             )}
 
-            {messages.map((msg, i) => {
+            {/* ── FIX 3: Render messages with date separators ─────────────── */}
+            {messagesWithDates.map((item, i) => {
+              // Date separator row
+              if (item._isDateSep) {
+                return (
+                  <div key={item._id} className="date-separator">
+                    <span className="date-separator-line" />
+                    <span className="date-separator-label">{item.label}</span>
+                    <span className="date-separator-line" />
+                  </div>
+                );
+              }
+
+              const msg       = item;
               const mine      = msg.sender === user.username;
-              const showName  = i === 0 || messages[i - 1]?.sender !== msg.sender;
-              const showAv    = i === messages.length - 1 || messages[i + 1]?.sender !== msg.sender;
+              // For showName/showAv, look at prev/next real messages only
+              const realMsgs  = messagesWithDates.filter(m => !m._isDateSep);
+              const myIndex   = realMsgs.findIndex(m => m === msg);
+              const showName  = myIndex === 0 || realMsgs[myIndex - 1]?.sender !== msg.sender;
+              const showAv    = myIndex === realMsgs.length - 1 || realMsgs[myIndex + 1]?.sender !== msg.sender;
               const isDeleted = msg.deleted;
               const isEditing = editingMsg === msg._id;
 

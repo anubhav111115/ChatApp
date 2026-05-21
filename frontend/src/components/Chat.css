@@ -2172,3 +2172,47 @@
     padding: 6px 10px;
   }
 }
+/* ── Date separator (add these rules to your Chat.css) ─────────────────────── */
+
+.date-separator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 10px;
+  padding: 0 12px;
+  user-select: none;
+}
+
+.date-separator-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border, rgba(128,128,128,0.25));
+  border-radius: 1px;
+}
+
+.date-separator-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #888);
+  white-space: nowrap;
+  padding: 2px 10px;
+  background: var(--bg-chip, rgba(128,128,128,0.10));
+  border-radius: 20px;
+}
+
+/* Dark mode overrides (if your CSS uses .dark class) */
+.dark .date-separator-line {
+  background: rgba(255,255,255,0.12);
+}
+.dark .date-separator-label {
+  color: #aaa;
+  background: rgba(255,255,255,0.07);
+}
+.light .date-separator-line {
+  background: rgba(0,0,0,0.10);
+}
+.light .date-separator-label {
+  color: #777;
+  background: rgba(0,0,0,0.05);
+}
