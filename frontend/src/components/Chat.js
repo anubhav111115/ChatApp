@@ -51,25 +51,31 @@ const getMediaConstraints = (type) => ({
     : false,
 });
 
+// TURN credentials — exact array from metered.ca dashboard (May-22-2026)
+// Free trial = 500MB cap. If calls silently break again, check usage at metered.ca
+// and click "Add Credential" to get a fresh quota, then update username+credential below.
 const ICE_SERVERS = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun.relay.metered.ca:80" },
     {
       urls: "turn:global.relay.metered.ca:80",
-      username: "8183412731114fe26f75c0cd",
-      credential: "SmXUVvFxV76lTYN6",
+      username: "a2ffe67ca3e479d3dee1a368",
+      credential: "iQdMKPfE7FACuK8V",
+    },
+    {
+      urls: "turn:global.relay.metered.ca:80?transport=tcp",
+      username: "a2ffe67ca3e479d3dee1a368",
+      credential: "iQdMKPfE7FACuK8V",
     },
     {
       urls: "turn:global.relay.metered.ca:443",
-      username: "8183412731114fe26f75c0cd",
-      credential: "SmXUVvFxV76lTYN6",
+      username: "a2ffe67ca3e479d3dee1a368",
+      credential: "iQdMKPfE7FACuK8V",
     },
     {
       urls: "turns:global.relay.metered.ca:443?transport=tcp",
-      username: "8183412731114fe26f75c0cd",
-      credential: "SmXUVvFxV76lTYN6",
+      username: "a2ffe67ca3e479d3dee1a368",
+      credential: "iQdMKPfE7FACuK8V",
     },
   ],
 };
